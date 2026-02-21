@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import AppShell from '../components/AppShell'
-import { useLocation, useNavigate } from 'react-router-dom'
 import ProgressTracker from '../components/ProgressTracker'
 import DecodedBillTable from '../components/DecodedBillTable'
 import FlagCard from '../components/FlagCard'
