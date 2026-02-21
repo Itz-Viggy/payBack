@@ -39,6 +39,7 @@ from services.pdf_converter import (
     convert_to_bill_input,
 )
 from services.precedent_service import PrecedentServiceError, search_precedents
+from services.medical_db import process_entire_bill
 
 app = FastAPI(title="PayBack API", version="0.1.0")
 BILLS_STORE: dict[str, dict] = {}
@@ -98,6 +99,10 @@ async def upload_bill(file: UploadFile = File(...)):
     print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
     BILLS_STORE[bill_id] = extracted_data
 
+    # Process the entire bill using the medical DB service (for benchmarking, etc.)
+    benchmarks = process_entire_bill(extracted_data)
+    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(benchmarks, indent=2))
+    
     return {"billId": bill_id}
 
 
