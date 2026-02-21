@@ -2,23 +2,31 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import BillUploader from '../components/BillUploader'
+import { api } from '../api/client'
 
 export default function Upload() {
   const navigate = useNavigate()
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
-  const handleFileAccepted = (file) => {
+  const handleFileAccepted = async (file) => {
+    setUploadError('')
     setIsUploading(true)
 
-    window.setTimeout(() => {
-      navigate('/processing/bill-8842-jk', {
+    try {
+      const response = await api.uploadBill(file)
+      navigate(`/processing/${response.billId}`, {
         state: {
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,
         },
       })
-    }, 600)
+    } catch (error) {
+      setUploadError(error.message || 'Upload failed. Please try again.')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -49,6 +57,9 @@ export default function Upload() {
 
         <div className="mt-12" style={{ animation: 'fadeUp 0.4s ease-out 0.45s both' }}>
           <BillUploader onFileAccepted={handleFileAccepted} disabled={isUploading} />
+          {uploadError ? (
+            <p className="mt-3 text-center font-mono text-xs text-flag-high">{uploadError}</p>
+          ) : null}
         </div>
 
         <div className="mt-16 grid w-full max-w-[760px] grid-cols-1 gap-8 sm:grid-cols-3">
