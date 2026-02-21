@@ -111,49 +111,130 @@ def _normalize_severity(value: str | None) -> str:
     return "medium"
 
 
-def run_relationship_check(line_items: list[dict]) -> list[dict]:
-    """Run Gemini relationship check and normalize findings to unified flag shape."""
-    if not line_items:
-        return []
-
-    try:
-        model = _configure_model()
-        base_prompt = _load_prompt("relationship_check")
-        line_items_json = json.dumps(line_items, indent=2)
-        prompt = base_prompt.replace("{{line_items_json}}", line_items_json)
-        response = model.generate_content(prompt)
-        response_text = (getattr(response, "text", None) or "").strip()
-        if not response_text:
-            return []
-        parsed = _parse_model_json(response_text)
-    except Exception as exc:
-        _debug_log("run_relationship_check_error", {"error": str(exc)}, "H1")
-        return []
-
-    raw_flags = parsed.get("flags")
-    if not isinstance(raw_flags, list):
-        return []
-
-    normalized_flags: list[dict] = []
+def _normalize_single_id_flags(raw_flags: list, default_message: str = "Potential billing issue.") -> list[dict]:
+    """Normalize flags that use a single line_item_id field."""
+    normalized: list[dict] = []
     for raw_flag in raw_flags:
         if not isinstance(raw_flag, dict):
             continue
-
         try:
             line_item_id = int(raw_flag.get("line_item_id"))
         except (TypeError, ValueError):
             continue
-
-        normalized_flags.append(
+        normalized.append(
             {
                 "rule_name": _normalize_rule_name(raw_flag.get("issue_type")),
                 "line_item_ids": [line_item_id],
                 "severity": _normalize_severity(raw_flag.get("severity")),
-                "message": str(raw_flag.get("explanation") or "Potential relationship billing issue."),
+                "message": str(raw_flag.get("explanation") or default_message),
                 "citation": None,
                 "billed_amount": None,
                 "benchmark_amount": None,
             }
         )
+    return normalized
 
-    return normalized_flags
+
+def _normalize_multi_id_flags(raw_flags: list, default_message: str = "Potential billing issue.") -> list[dict]:
+    """Normalize flags that use a line_item_ids (array) field."""
+    normalized: list[dict] = []
+    for raw_flag in raw_flags:
+        if not isinstance(raw_flag, dict):
+            continue
+        raw_ids = raw_flag.get("line_item_ids") or raw_flag.get("line_item_id")
+        if isinstance(raw_ids, (int, str)):
+            raw_ids = [raw_ids]
+        if not isinstance(raw_ids, list):
+            continue
+        line_item_ids: list[int] = []
+        for x in raw_ids:
+            try:
+                line_item_ids.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        if not line_item_ids:
+            continue
+        normalized.append(
+            {
+                "rule_name": _normalize_rule_name(raw_flag.get("issue_type")),
+                "line_item_ids": line_item_ids,
+                "severity": _normalize_severity(raw_flag.get("severity")),
+                "message": str(raw_flag.get("explanation") or default_message),
+                "citation": None,
+                "billed_amount": None,
+                "benchmark_amount": None,
+            }
+        )
+    return normalized
+
+
+def _call_gemini_check(prompt_name: str, substitutions: dict[str, str], log_label: str) -> list | None:
+    """Load a prompt, substitute placeholders, call Gemini, and return raw flags list."""
+    try:
+        model = _configure_model()
+        base_prompt = _load_prompt(prompt_name)
+        prompt = base_prompt
+        for key, value in substitutions.items():
+            prompt = prompt.replace(key, value)
+        response = model.generate_content(prompt)
+        response_text = (getattr(response, "text", None) or "").strip()
+        if not response_text:
+            return None
+        parsed = _parse_model_json(response_text)
+        raw_flags = parsed.get("flags")
+        return raw_flags if isinstance(raw_flags, list) else None
+    except Exception as exc:
+        _debug_log(f"{log_label}_error", {"error": str(exc)}, "H1")
+        return None
+
+
+def run_relationship_check(line_items: list[dict], state: str = "") -> list[dict]:
+    """Run Gemini relationship check and normalize findings to unified flag shape."""
+    if not line_items:
+        return []
+    raw_flags = _call_gemini_check(
+        "relationship_check",
+        {
+            "{{line_items_json}}": json.dumps(line_items, indent=2),
+            "{{state}}": state or "Not specified",
+        },
+        "run_relationship_check",
+    )
+    if raw_flags is None:
+        return []
+    return _normalize_single_id_flags(raw_flags, "Potential relationship billing issue.")
+
+
+def run_upcoding_check(line_items: list[dict], diagnosis_codes: list[str], state: str = "") -> list[dict]:
+    """Run Gemini upcoding check (E&M level vs diagnosis complexity)."""
+    if not line_items:
+        return []
+    raw_flags = _call_gemini_check(
+        "upcoding_check",
+        {
+            "{{line_items_json}}": json.dumps(line_items, indent=2),
+            "{{diagnosis_codes_json}}": json.dumps(diagnosis_codes, indent=2),
+            "{{state}}": state or "Not specified",
+        },
+        "run_upcoding_check",
+    )
+    if raw_flags is None:
+        return []
+    return _normalize_single_id_flags(raw_flags, "Potential upcoding issue.")
+
+
+def run_unbundling_check(line_items: list[dict], state: str = "") -> list[dict]:
+    """Run Gemini unbundling check (CPT bundling violations)."""
+    if not line_items:
+        return []
+    raw_flags = _call_gemini_check(
+        "unbundling_check",
+        {
+            "{{line_items_json}}": json.dumps(line_items, indent=2),
+            "{{state}}": state or "Not specified",
+        },
+        "run_unbundling_check",
+    )
+    if raw_flags is None:
+        return []
+    return _normalize_multi_id_flags(raw_flags, "Potential unbundling issue.")

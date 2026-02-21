@@ -242,16 +242,26 @@ def _print_findings(flags: list[dict[str, Any]], summary: dict[str, Any]) -> Non
 
 def run_holistic_review(layer2_payload: dict[str, Any]) -> dict[str, Any]:
     """Run deterministic and Gemini-assisted checks and return unified findings."""
-    from services.gemini_service import run_relationship_check
+    from services.gemini_service import (
+        run_relationship_check,
+        run_upcoding_check,
+        run_unbundling_check,
+    )
 
     rules_flags = run_rules(layer2_payload)
+
     line_items = [
         (entry.get("billed_item") or {})
         for entry in (layer2_payload.get("audited_items", []) or [])
     ]
-    gemini_flags = run_relationship_check(line_items)
+    diagnosis_codes = layer2_payload.get("diagnosis_codes") or []
+    state = layer2_payload.get("state") or ""
 
-    all_flags = rules_flags + gemini_flags
+    relationship_flags = run_relationship_check(line_items, state)
+    upcoding_flags = run_upcoding_check(line_items, diagnosis_codes, state)
+    unbundling_flags = run_unbundling_check(line_items, state)
+
+    all_flags = rules_flags + relationship_flags + upcoding_flags + unbundling_flags
     for idx, flag in enumerate(all_flags, start=1):
         flag["flag_id"] = f"fl-{idx}"
 

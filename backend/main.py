@@ -100,6 +100,8 @@ async def upload_bill(file: UploadFile = File(...)):
 
     # Process the entire bill using the medical DB service (for benchmarking, etc.)
     layer2_payload = process_entire_bill(extracted_data)
+    layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
+    layer2_payload["state"] = extracted_data.get("state") or ""
     print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
 
     # Layer 3: holistic findings from deterministic rules + Gemini relationship checks.

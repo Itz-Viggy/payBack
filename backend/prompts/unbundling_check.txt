@@ -3,6 +3,8 @@
 
 You are a medical billing auditor specializing in CPT code bundling rules. Review the following list of billed CPT codes and identify any unbundling violations — cases where multiple codes are billed separately but should be combined into a single bundled code per CMS and AMA guidelines.
 
+Consider state-specific bundling rules where applicable. State for this bill: {{state}}.
+
 Also flag:
 - Component billing: billing individual parts of a procedure that is covered by a comprehensive code
 - Modifier abuse: use of modifiers (e.g., -59, -25) that appear to bypass bundling edits without clinical justification
