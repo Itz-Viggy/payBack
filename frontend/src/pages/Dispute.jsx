@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
 import DisputePanel from '../components/DisputePanel'
 import { formatCurrency, formatDateShort } from '../utils/format'
@@ -93,7 +92,7 @@ export default function Dispute() {
     value.startsWith('[') ? 'text-amber italic' : 'text-text-primary'
 
   return (
-    <AppShell contentClassName="pb-16">
+    <section className="pb-16">
       <ProgressTracker activeStep={3} subLabel="Build your dispute packet and verify letter language." />
 
       <section className="mt-6 grid gap-10 lg:grid-cols-[52%_48%]">
@@ -169,6 +168,6 @@ export default function Dispute() {
           </div>
         </aside>
       </section>
-    </AppShell>
+    </section>
   )
 }

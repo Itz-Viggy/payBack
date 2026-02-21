@@ -238,3 +238,29 @@ def run_unbundling_check(line_items: list[dict], state: str = "") -> list[dict]:
     if raw_flags is None:
         return []
     return _normalize_multi_id_flags(raw_flags, "Potential unbundling issue.")
+def generate_dispute_letter(case_data: dict) -> str:
+    """
+    Generate dispute letter text using the dispute_letter prompt and Gemini.
+    case_data must include: patient_name, account_number, facility, date_of_service,
+    total_billed, disputed_charges_json, pricing_benchmarks_json.
+    Returns plain letter text (no JSON).
+    """
+    prompt_tpl = _load_prompt("dispute_letter")
+    prompt = (
+        prompt_tpl.replace("{{patient_name}}", str(case_data.get("patient_name") or ""))
+        .replace("{{account_number}}", str(case_data.get("account_number") or ""))
+        .replace("{{facility}}", str(case_data.get("facility") or ""))
+        .replace("{{date_of_service}}", str(case_data.get("date_of_service") or ""))
+        .replace("{{total_billed}}", str(case_data.get("total_billed") or ""))
+        .replace("{{disputed_charges_json}}", str(case_data.get("disputed_charges_json") or "[]"))
+        .replace("{{pricing_benchmarks_json}}", str(case_data.get("pricing_benchmarks_json") or "[]"))
+    )
+    model = _configure_model()
+    try:
+        response = model.generate_content(prompt)
+    except Exception as exc:
+        raise ExtractionError(f"Gemini dispute letter failed: {exc}") from exc
+    response_text = (getattr(response, "text", None) or "").strip()
+    if not response_text:
+        raise ExtractionError("Gemini returned an empty dispute letter")
+    return response_text

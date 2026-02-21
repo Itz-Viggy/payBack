@@ -66,10 +66,7 @@ export default function BillUploader({ onFileAccepted, disabled = false }) {
       >
         <input {...getInputProps()} />
         <Upload className="mx-auto mb-4 h-8 w-8 text-text-muted" strokeWidth={1.5} />
-        <p className="font-display text-[17px] font-bold text-text-primary">Drop your bill here</p>
-        <p className="mt-2 font-mono text-xs font-light text-text-muted">
-          PDF . JPG . PNG . Max 20MB . Itemized bills only
-        </p>
+        <p className="font-display text-[17px] font-bold text-text-primary">Drop your itemized bill here</p>
 
         {selectedFileName ? (
           <p className="mt-4 font-mono text-xs text-amber">Selected: {selectedFileName}</p>

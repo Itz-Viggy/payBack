@@ -13,7 +13,7 @@ export default function EmailSender({
   return (
     <div className="mx-auto w-full max-w-[540px] py-12">
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">READY TO SEND</p>
-      <h1 className="mt-3 font-display text-4xl font-extrabold leading-[1.05] text-text-primary sm:text-[52px]">
+      <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-text-primary sm:text-[52px]">
         Send from your
         <br />
         own Gmail.
