@@ -48,13 +48,18 @@ def search_precedents(query_text: str, top_k: int = DEFAULT_TOP_K) -> list[dict[
     try:
         from cortex import CortexClient, DistanceMetric
     except ImportError as e:
-        raise PrecedentServiceError("Vector DB client (cortex) not installed") from e
+        raise PrecedentServiceError(
+            "Actian VectorAI DB Python client not installed. "
+            "Do not use the PyPI 'cortex' package (cortex.dev). Install the client from the hackathon/Actian source."
+        ) from e
 
     query_vector = _embed(query_text.strip())
 
     try:
         with CortexClient(CORTEX_ADDR) as client:
-            results = client.search(COLLECTION_NAME, query_vector, top_k=top_k)
+            results = client.search(
+                COLLECTION_NAME, query_vector, top_k=top_k, with_payload=True
+            )
     except Exception as e:
         raise PrecedentServiceError(f"Vector DB unreachable or search failed: {e}") from e
 

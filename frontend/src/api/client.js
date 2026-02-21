@@ -35,9 +35,33 @@ async function uploadBill(file) {
   return payload;
 }
 
+async function getPrecedents(billId, topK = 5) {
+  let response;
+  try {
+    response = await fetch(`${baseURL}/bills/${billId}/precedents?top_k=${topK}`);
+  } catch (error) {
+    throw new Error('Unable to reach backend for precedent search.');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.detail || 'Precedent search failed.';
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
 export const api = {
   baseURL,
   uploadBill,
+  getPrecedents,
   // getAnalysisResult(billId) -> { decoded, flags, ... }
   // buildDisputeCase(billId, selectedFlagIds) -> { caseId, letterPreview, ... }
   // sendDisputeEmail(caseId, recipient) -> { sent: true }
