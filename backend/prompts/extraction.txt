@@ -15,7 +15,7 @@ For each line item, return:
 
 Also extract at the bill level (if present):
 - insurance/payer name, member_id, group_number
-- diagnosis_codes: list of ICD-10 or diagnosis codes on the bill (empty array if none)
+- diagnosis_codes: list of ICD-10 or diagnosis codes found anywhere on the document (header, footer, diagnosis section, line items, or any labeled field). Return empty array only if truly none present.
 - state: the facility or patient state abbreviation, e.g. "FL" (null if not found)
 
 Return ONLY valid JSON in this format:
