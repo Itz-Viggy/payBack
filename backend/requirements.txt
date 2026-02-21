@@ -31,3 +31,5 @@ pydantic-settings==2.2.1    # Loads and validates .env variables at startup
 google-auth==2.47.0         # OAuth2 auth for Gmail API (gmail_mcp.py); >=2.47.0 for google-genai
 google-auth-oauthlib==1.2.0 # OAuth flow helpers for Gmail send flow
 google-api-python-client==2.128.0  # Gmail REST API client used by gmail_mcp.py
+
+requests==2.31.0            # Sync HTTP client for Gmail API calls and MCP interactions (gmail_mcp.py)
