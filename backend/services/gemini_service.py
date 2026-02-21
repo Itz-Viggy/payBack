@@ -23,7 +23,7 @@ def _debug_log(msg: str, data: dict, hypothesis_id: str = "H1"):
 # #endregion
 
 
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-flash"
 
 
 class ExtractionError(Exception):

@@ -1,22 +1,22 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import BillUploader from '../components/BillUploader'
-import { api } from '../api/client'
 
 export default function Upload() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [isUploading, setIsUploading] = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  const [uploadError, setUploadError] = useState(location.state?.uploadError ?? '')
 
   const handleFileAccepted = async (file) => {
     setUploadError('')
     setIsUploading(true)
 
     try {
-      const response = await api.uploadBill(file)
-      navigate(`/processing/${response.billId}`, {
+      navigate('/processing/pending', {
         state: {
+          file,
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,

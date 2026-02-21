@@ -94,7 +94,7 @@ async def upload_bill(file: UploadFile = File(...)):
     except ExtractionError as exc:
         raise HTTPException(status_code=500, detail=f"Gemini extraction failed: {exc}") from exc
 
-    print(f"[gemini] Extracted {len(extracted_data.get('line_items', []))} line items for {bill_id}")
+    print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
     BILLS_STORE[bill_id] = extracted_data
 
     return {"billId": bill_id}

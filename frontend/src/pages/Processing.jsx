@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
+import { api } from '../api/client'
 
 const pipelineSteps = [
   'File validated',
@@ -19,6 +20,7 @@ export default function Processing() {
   const location = useLocation()
   const [activeLine, setActiveLine] = useState(0)
 
+  const pendingFile = location.state?.file
   const fileName = location.state?.fileName ?? 'uploaded-bill.pdf'
 
   useEffect(() => {
@@ -30,6 +32,33 @@ export default function Processing() {
     let cancelled = false
 
     const runPipeline = async () => {
+      if (billId === 'pending') {
+        if (!pendingFile) {
+          navigate('/', {
+            replace: true,
+            state: { uploadError: 'Upload session expired. Please select the file again.' },
+          })
+          return
+        }
+
+        setActiveLine(2)
+        try {
+          const response = await api.uploadBill(pendingFile)
+          if (cancelled) return
+          navigate(`/processing/${response.billId}`, {
+            replace: true,
+            state: { fileName },
+          })
+        } catch (error) {
+          if (cancelled) return
+          navigate('/', {
+            replace: true,
+            state: { uploadError: error.message || 'Upload failed. Please try again.' },
+          })
+        }
+        return
+      }
+
       for (let index = 0; index < pipelineSteps.length; index += 1) {
         if (cancelled) return
         setActiveLine(index)
@@ -53,7 +82,7 @@ export default function Processing() {
     return () => {
       cancelled = true
     }
-  }, [billId, fileName, navigate])
+  }, [billId, fileName, navigate, pendingFile])
 
   const subLabel = useMemo(() => {
     if (activeLine < 2) return 'Reading your bill...'
