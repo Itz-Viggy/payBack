@@ -8,6 +8,7 @@ google-generativeai==0.7.2  # Gemini API SDK — used in gemini_service.py for b
 
 # ── MongoDB ─────────────────────────────────────────────────
 pymongo==4.7.2              # MongoDB driver — used in mongo_service.py to persist bills, cases, disputes
+motor==3.4.0                # Async MongoDB driver for FastAPI (history.py)
 
 # ── PDF / Image Handling ────────────────────────────────────
 pypdf2==3.0.1               # Extracts raw text from uploaded PDF bills (pdf_converter.py)

@@ -40,6 +40,7 @@ from services.pdf_converter import (
 )
 from services.precedent_service import PrecedentServiceError, search_precedents
 from services.medical_db import process_entire_bill
+from services.history import router as history_router, store_bill_analysis
 from services.rules_engine import run_holistic_review
 
 app = FastAPI(title="PayBack API", version="0.1.0")
@@ -47,11 +48,14 @@ BILLS_STORE: dict[str, dict] = {}
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5174", "http://127.0.0.1:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── History / MongoDB persistence routes ─────────────────────
+app.include_router(history_router)
 
 
 @app.get("/health")
@@ -62,7 +66,7 @@ def health():
 
 @app.post("/bills/upload")
 async def upload_bill(file: UploadFile = File(...)):
-    """Upload a bill file and convert it into Gemini-ready input."""
+    """Upload a bill file, run the full pipeline, and persist results to MongoDB."""
     content = await file.read()
 
     try:
@@ -100,6 +104,49 @@ async def upload_bill(file: UploadFile = File(...)):
     print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
 
     # Process the entire bill using the medical DB service (for benchmarking, etc.)
+    benchmarks = process_entire_bill(extracted_data)
+    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(benchmarks, indent=2))
+
+    # ── Persist to MongoDB ────────────────────────────────────────────────
+    raw_ocr_text = converted.text or ""
+    hospital_name = extracted_data.get("facility")
+    total_billed = extracted_data.get("total_billed")
+
+    # Calculate estimated overcharge from benchmarks
+    estimated_overcharge = 0.0
+    for i, billed in enumerate(benchmarks.get("billed_charges", [])):
+        sc_list = benchmarks.get("standard_charges", [])[i] if i < len(benchmarks.get("standard_charges", [])) else []
+        if sc_list:
+            best_benchmark = min(
+                (float(s.get("standard_charge", 0)) for s in sc_list if s.get("standard_charge")),
+                default=0,
+            )
+            if best_benchmark > 0 and billed > best_benchmark:
+                estimated_overcharge += billed - best_benchmark
+
+    try:
+        db_result = await store_bill_analysis(
+            file_bytes=content,
+            filename=file.filename or "upload",
+            content_type=file.content_type,
+            raw_ocr_text=raw_ocr_text,
+            extracted_codes=benchmarks.get("extracted_codes", []),
+            standard_charges=benchmarks.get("standard_charges", []),
+            billed_charges=benchmarks.get("billed_charges", []),
+            hospital_name=hospital_name,
+            total_billed=total_billed,
+            estimated_overcharge=round(estimated_overcharge, 2) if estimated_overcharge else None,
+        )
+        print(f"[history] Stored analysis: {db_result['bill_analysis_id']}")
+    except Exception as exc:
+        # Don't fail the upload if DB persistence fails — log and continue
+        print(f"[history] WARNING — failed to persist: {exc}")
+        db_result = None
+
+    return {
+        "billId": bill_id,
+        "analysisId": db_result["bill_analysis_id"] if db_result else None,
+    }
     layer2_payload = process_entire_bill(extracted_data)
     layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
     layer2_payload["state"] = extracted_data.get("state") or ""

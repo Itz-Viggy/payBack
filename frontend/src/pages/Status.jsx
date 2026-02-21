@@ -1,41 +1,46 @@
-import { Clock, Mail, AlertCircle } from 'lucide-react'
-
-// Placeholder data for pending disputes
-const pendingDisputes = [
-  {
-    id: 'disp-001',
-    hospitalName: 'Massachusetts General Hospital',
-    dateSubmitted: '2026-02-18',
-    estimatedSavings: 4200,
-    status: 'awaiting_response',
-    daysWaiting: 3,
-  },
-  {
-    id: 'disp-002',
-    hospitalName: 'Boston Medical Center',
-    dateSubmitted: '2026-02-10',
-    estimatedSavings: 1850,
-    status: 'follow_up_sent',
-    daysWaiting: 11,
-  },
-]
+import { useEffect, useState } from 'react'
+import { Clock, Mail, AlertCircle, Loader2 } from 'lucide-react'
+import { api } from '../api/client'
 
 const statusConfig = {
-  awaiting_response: {
-    label: 'Awaiting Response',
+  pending: {
+    label: 'Pending',
     color: 'text-status-pending',
     bg: 'bg-[rgba(140,137,127,0.1)]',
     border: 'border-[rgba(140,137,127,0.25)]',
   },
-  follow_up_sent: {
-    label: 'Follow-up Sent',
+  email_sent: {
+    label: 'Email Sent',
+    color: 'text-status-response',
+    bg: 'bg-[rgba(107,143,196,0.1)]',
+    border: 'border-[rgba(107,143,196,0.25)]',
+  },
+  waiting_response: {
+    label: 'Awaiting Response',
     color: 'text-status-response',
     bg: 'bg-[rgba(107,143,196,0.1)]',
     border: 'border-[rgba(107,143,196,0.25)]',
   },
 }
 
+// Statuses that count as "active / pending"
+const ACTIVE_STATUSES = new Set(['pending', 'email_sent', 'waiting_response'])
+
 export default function Status() {
+  const [disputes, setDisputes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.getHistory()
+      .then((data) => {
+        // Only show active disputes
+        setDisputes(data.filter((d) => ACTIVE_STATUSES.has(d.status)))
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <section className="py-6">
       <div className="mb-8">
@@ -50,7 +55,15 @@ export default function Status() {
         </p>
       </div>
 
-      {pendingDisputes.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-amber" />
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-flag-high-border bg-flag-high-dim py-8 text-center">
+          <p className="font-mono text-sm text-flag-high">{error}</p>
+        </div>
+      ) : disputes.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-border-subtle bg-bg-surface py-16 text-center">
           <Clock className="h-12 w-12 text-text-muted" />
           <p className="mt-4 font-display text-lg text-text-secondary">
@@ -62,8 +75,13 @@ export default function Status() {
         </div>
       ) : (
         <div className="space-y-4">
-          {pendingDisputes.map((dispute) => {
-            const config = statusConfig[dispute.status]
+          {disputes.map((dispute) => {
+            const config = statusConfig[dispute.status] || statusConfig.pending
+            const createdDate = dispute.created_at ? new Date(dispute.created_at) : null
+            const daysWaiting = createdDate
+              ? Math.max(0, Math.floor((Date.now() - createdDate.getTime()) / 86400000))
+              : 0
+
             return (
               <div
                 key={dispute.id}
@@ -72,10 +90,10 @@ export default function Status() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="font-display text-base font-semibold text-text-primary">
-                      {dispute.hospitalName}
+                      {dispute.hospital_name || 'Unknown Hospital'}
                     </h3>
                     <p className="mt-1 font-mono text-xs text-text-muted">
-                      Submitted: {dispute.dateSubmitted}
+                      Submitted: {createdDate ? createdDate.toLocaleDateString() : '—'}
                     </p>
                   </div>
                   <span
@@ -89,15 +107,17 @@ export default function Status() {
                   <div className="flex items-center gap-2">
                     <Mail className="h-4 w-4 text-text-muted" />
                     <span className="font-mono text-xs text-text-secondary">
-                      {dispute.daysWaiting} days waiting
+                      {daysWaiting} days waiting
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 text-amber" />
-                    <span className="font-mono text-xs text-amber">
-                      Est. savings: ${dispute.estimatedSavings.toLocaleString()}
-                    </span>
-                  </div>
+                  {dispute.estimated_overcharge != null && (
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber" />
+                      <span className="font-mono text-xs text-amber">
+                        Est. overcharge: ${dispute.estimated_overcharge.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             )
