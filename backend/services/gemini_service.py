@@ -93,3 +93,67 @@ def extract_bill(text: str | None, images: list[bytes] | None) -> dict:
         raise ExtractionError("Gemini returned an empty response")
 
     return _parse_model_json(response_text)
+
+
+def _normalize_rule_name(issue_type: str | None) -> str:
+    raw = (issue_type or "").strip().lower()
+    if not raw:
+        return "relationship_issue"
+    # Keep only identifier-safe characters for stable downstream keys.
+    normalized = re.sub(r"[^a-z0-9_]+", "_", raw).strip("_")
+    return normalized or "relationship_issue"
+
+
+def _normalize_severity(value: str | None) -> str:
+    lowered = (value or "").strip().lower()
+    if lowered in {"low", "medium", "high"}:
+        return lowered
+    return "medium"
+
+
+def run_relationship_check(line_items: list[dict]) -> list[dict]:
+    """Run Gemini relationship check and normalize findings to unified flag shape."""
+    if not line_items:
+        return []
+
+    try:
+        model = _configure_model()
+        base_prompt = _load_prompt("relationship_check")
+        line_items_json = json.dumps(line_items, indent=2)
+        prompt = base_prompt.replace("{{line_items_json}}", line_items_json)
+        response = model.generate_content(prompt)
+        response_text = (getattr(response, "text", None) or "").strip()
+        if not response_text:
+            return []
+        parsed = _parse_model_json(response_text)
+    except Exception as exc:
+        _debug_log("run_relationship_check_error", {"error": str(exc)}, "H1")
+        return []
+
+    raw_flags = parsed.get("flags")
+    if not isinstance(raw_flags, list):
+        return []
+
+    normalized_flags: list[dict] = []
+    for raw_flag in raw_flags:
+        if not isinstance(raw_flag, dict):
+            continue
+
+        try:
+            line_item_id = int(raw_flag.get("line_item_id"))
+        except (TypeError, ValueError):
+            continue
+
+        normalized_flags.append(
+            {
+                "rule_name": _normalize_rule_name(raw_flag.get("issue_type")),
+                "line_item_ids": [line_item_id],
+                "severity": _normalize_severity(raw_flag.get("severity")),
+                "message": str(raw_flag.get("explanation") or "Potential relationship billing issue."),
+                "citation": None,
+                "billed_amount": None,
+                "benchmark_amount": None,
+            }
+        )
+
+    return normalized_flags
