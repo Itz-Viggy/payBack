@@ -27,6 +27,11 @@ pandas==2.2.2               # Reads oria_hospital_index.csv and supports hospita
 pydantic==2.9.0             # Request/response schema validation throughout the FastAPI app; >=2.9.0 for google-genai
 pydantic-settings==2.2.1    # Loads and validates .env variables at startup
 
+# ── Vector DB (Actian VectorAI DB) ───────────────────────────
+cortex                       # VectorAI DB Python client — precedent_service.py, vectorDB scripts
+sentence-transformers        # Local embeddings (all-MiniLM-L6-v2) for precedent search
+numpy                        # Normalization for COSINE similarity (used by precedent_service)
+
 # ── Gmail / MCP Integration ─────────────────────────────────
 google-auth==2.47.0         # OAuth2 auth for Gmail API (gmail_mcp.py); >=2.47.0 for google-genai
 google-auth-oauthlib==1.2.0 # OAuth flow helpers for Gmail send flow

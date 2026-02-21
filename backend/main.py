@@ -38,6 +38,7 @@ from services.pdf_converter import (
     UnsupportedFileTypeError,
     convert_to_bill_input,
 )
+from services.precedent_service import PrecedentServiceError, search_precedents
 from services.medical_db import process_entire_bill
 
 app = FastAPI(title="PayBack API", version="0.1.0")
@@ -110,6 +111,54 @@ def get_bill(bill_id: str):
     if bill_id not in BILLS_STORE:
         raise HTTPException(status_code=404, detail="Bill not found")
     return BILLS_STORE[bill_id]
+
+
+def _line_item_query_text(item: dict) -> str:
+    """Build a short query string from a line item for precedent similarity search."""
+    parts = [
+        item.get("description") or "",
+        f"CPT {item.get('cpt_code') or 'N/A'}",
+        f"quantity {item.get('quantity', '')}",
+        f"unit price {item.get('unit_price', '')}",
+        f"total {item.get('total_charge', '')}",
+    ]
+    return " ".join(str(p).strip() for p in parts if p).strip() or "medical bill line item"
+
+
+@app.get("/bills/{bill_id}/precedents")
+def get_bill_precedents(bill_id: str, top_k: int = 5):
+    """
+    For each line item in the bill, run precedent similarity search and return
+    similar historical cases (id, score, payload). Payload schema: issue_type,
+    setting, codes, severity, recommended_actions, evidence_requests,
+    evidence_checklist, letter_snippet, typical_outcome (optional), tags (optional).
+    Only the precedent's summary is embedded; payload is returned as stored.
+    Requires VectorAI DB running at localhost:50051 and precedents collection seeded.
+    """
+    if bill_id not in BILLS_STORE:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    bill = BILLS_STORE[bill_id]
+    line_items = bill.get("line_items") or []
+    if not line_items:
+        return {"line_items": []}
+
+    try:
+        enriched = []
+        for item in line_items:
+            query_text = _line_item_query_text(item)
+            precedents = search_precedents(query_text, top_k=max(1, min(top_k, 20)))
+            enriched.append({
+                "line_item_id": item.get("line_item_id"),
+                "cpt_code": item.get("cpt_code"),
+                "description": item.get("description"),
+                "precedents": precedents,
+            })
+        return {"line_items": enriched}
+    except PrecedentServiceError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Precedent search unavailable. Ensure VectorAI DB is running at localhost:50051 and precedents are seeded. {exc!s}",
+        ) from exc
 
 
 # TODO: Add routes for upload, analyze, get results, build dispute case, send email.
