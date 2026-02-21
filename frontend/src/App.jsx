@@ -13,6 +13,7 @@ import Processing from './pages/Processing'
 import Results from './pages/Results'
 import Dispute from './pages/Dispute'
 import Send from './pages/Send'
+import SimilarCases from './pages/SimilarCases'
 
 const router = createBrowserRouter([
   {
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: 'history', element: <HistoryPage /> },
       { path: 'processing/:billId?', element: <Processing /> },
       { path: 'results/:billId?', element: <Results /> },
+      { path: 'results/:billId/similar-cases', element: <SimilarCases /> },
       { path: 'dispute/:caseId?', element: <Dispute /> },
       { path: 'send/:caseId?', element: <Send /> },
     ],

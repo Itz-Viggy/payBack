@@ -1,5 +1,5 @@
 # Prompt: extraction.txt
-# Used to extract structured line items from raw bill text (procedure code, description, amount, quantity, date, etc.).
+# Used to extract structured line items from raw bill text.
 
 You are a medical billing expert. Extract all line items from the following medical bill text into structured JSON.
 
@@ -13,7 +13,10 @@ For each line item, return:
 - total_charge: total charged amount in USD
 - provider: name of the billing provider or department (if listed)
 
-Also extract at the bill level (if present): insurance/payer name, member_id, group_number.
+Also extract at the bill level (if present):
+- insurance/payer name, member_id, group_number
+- diagnosis_codes: list of ICD-10 or diagnosis codes found anywhere on the document (header, footer, diagnosis section, line items, or any labeled field). Return empty array only if truly none present.
+- state: the facility or patient state abbreviation, e.g. "FL" (null if not found)
 
 Return ONLY valid JSON in this format:
 {
@@ -23,6 +26,8 @@ Return ONLY valid JSON in this format:
   "bill_date": "...",
   "total_billed": 0.00,
   "insurance": "...",
+  "diagnosis_codes": [],
+  "state": null,
   "line_items": [ ... ]
 }
 
