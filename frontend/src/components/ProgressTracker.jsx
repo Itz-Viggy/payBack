@@ -25,7 +25,7 @@ export default function ProgressTracker({ activeStep = 0, subLabel = '' }) {
                 }`}
               >
                 {step}
-                {isDone ? ' ?' : ''}
+                {isDone ? ' DONE' : ''}
               </span>
               {index < defaultSteps.length - 1 ? (
                 <span className="hidden h-px flex-1 bg-border-subtle sm:block" />
