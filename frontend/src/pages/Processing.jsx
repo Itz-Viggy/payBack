@@ -7,7 +7,6 @@ const pipelineSteps = [
   'File validated',
   'PDF converted',
   'Extracting line items...',
-  'Code classification',
   'Hospital rate lookup',
   'Error detection',
   'Assembling report',
@@ -60,10 +59,12 @@ export default function Processing() {
         return
       }
 
+      const stepDelaysMs = [1000, 2000, 5000, 700, 700, 700]
       for (let index = 0; index < pipelineSteps.length; index += 1) {
         if (cancelled) return
         setActiveLine(index)
-        await new Promise((resolve) => window.setTimeout(resolve, index < 2 ? 500 : 700))
+        const delay = stepDelaysMs[index] ?? 700
+        await new Promise((resolve) => window.setTimeout(resolve, delay))
       }
 
       if (!cancelled) {
@@ -127,11 +128,13 @@ export default function Processing() {
               return (
                 <div key={line} className="flex items-center gap-3 font-mono text-[13px]">
                   {done ? (
-                    <span className="text-amber">?</span>
+                    <span className="text-amber" aria-hidden="true">{'\u2713'}</span>
                   ) : active ? (
-                    <span className="animate-pulse-dot text-amber">?</span>
+                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber border-t-transparent" />
+                    </span>
                   ) : (
-                    <span className="text-text-muted">�</span>
+                    <span className="text-text-muted" aria-hidden="true">{'\u00B7'}</span>
                   )}
 
                   <span className={done || active ? 'text-text-code' : 'text-text-muted'}>{line}</span>
