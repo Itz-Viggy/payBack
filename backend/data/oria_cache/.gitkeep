@@ -1,0 +1,2 @@
+# Cached ORIA API responses to reduce redundant lookups.
+# Cache files may be stored here at runtime.

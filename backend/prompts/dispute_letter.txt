@@ -1,0 +1,29 @@
+# Prompt: dispute_letter.txt
+# Used to generate a professional patient dispute letter from case data and flagged items.
+
+You are a patient advocate helping write a formal medical bill dispute letter. Using the case details below, write a professional, firm, and factual dispute letter from the patient to the hospital billing department.
+
+The letter must:
+- Be addressed formally to the billing department
+- Open by identifying the patient, account number, and date of service
+- For each flagged charge, clearly state: the charge description, the amount billed, the reason it is being disputed, and (where applicable) the fair market price benchmark
+- Cite relevant regulations where appropriate (e.g., No Surprises Act, Stark Law, CMS bundling rules)
+- Request a corrected itemized bill and written response within 30 days
+- Close professionally with the patient's contact information placeholder
+
+Tone: firm but respectful. Do not use accusatory language. Focus on facts and patient rights.
+
+Return ONLY the letter text, ready to send. Do not include any JSON, preamble, or explanation outside the letter itself.
+
+Case details:
+- Patient name: {{patient_name}}
+- Account number: {{account_number}}
+- Facility: {{facility}}
+- Date of service: {{date_of_service}}
+- Total amount billed: {{total_billed}}
+
+Disputed charges:
+{{disputed_charges_json}}
+
+Fair pricing benchmarks (where available):
+{{pricing_benchmarks_json}}

@@ -1,0 +1,30 @@
+# ── Web Framework ──────────────────────────────────────────
+fastapi==0.111.0            # Main API framework for all backend routes
+uvicorn[standard]==0.29.0   # ASGI server to run FastAPI
+python-multipart==0.0.9     # Required for FastAPI file upload handling (UploadFile)
+
+# ── Google Gemini ───────────────────────────────────────────
+google-generativeai==0.7.2  # Gemini API SDK — used in gemini_service.py for bill extraction & analysis
+
+# ── MongoDB ─────────────────────────────────────────────────
+pymongo==4.7.2              # MongoDB driver — used in mongo_service.py to persist bills, cases, disputes
+
+# ── PDF / Image Handling ────────────────────────────────────
+pypdf2==3.0.1               # Extracts raw text from uploaded PDF bills (pdf_converter.py)
+pdf2image==1.17.0           # Converts PDF pages to images for Gemini (pdf_converter.py). Requires poppler on system (see README).
+Pillow==10.3.0              # Image processing — required by pdf2image
+python-magic==0.4.27        # MIME type detection for uploads. On Windows consider python-magic-bin if libmagic fails.
+
+# ── HTTP Clients ────────────────────────────────────────────
+httpx==0.27.0               # Async HTTP client for calling the ORIA API (oria_db.py)
+requests==2.31.0            # Sync HTTP client for simpler outbound calls
+
+# ── Data Handling ───────────────────────────────────────────
+pandas==2.2.2               # Reads oria_hospital_index.csv and supports hospital_matcher.py lookups
+pydantic==2.7.1             # Request/response schema validation throughout the FastAPI app
+pydantic-settings==2.2.1    # Loads and validates .env variables at startup
+
+# ── Gmail / MCP Integration ─────────────────────────────────
+google-auth==2.29.0         # OAuth2 auth for Gmail API (gmail_mcp.py)
+google-auth-oauthlib==1.2.0 # OAuth flow helpers for Gmail send flow
+google-api-python-client==2.128.0  # Gmail REST API client used by gmail_mcp.py

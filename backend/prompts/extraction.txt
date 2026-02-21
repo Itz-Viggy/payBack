@@ -1,0 +1,29 @@
+# Prompt: extraction.txt
+# Used to extract structured line items from raw bill text (procedure code, description, amount, quantity, date, etc.).
+
+You are a medical billing expert. Extract all line items from the following medical bill text into structured JSON.
+
+For each line item, return:
+- line_item_id: sequential integer
+- cpt_code: the CPT or HCPCS billing code (string, or null if not found)
+- description: the service or procedure description
+- date_of_service: in YYYY-MM-DD format (or null if not found)
+- quantity: number of units billed
+- unit_price: price per unit in USD
+- total_charge: total charged amount in USD
+- provider: name of the billing provider or department (if listed)
+
+Return ONLY valid JSON in this format:
+{
+  "patient_name": "...",
+  "account_number": "...",
+  "facility": "...",
+  "bill_date": "...",
+  "total_billed": 0.00,
+  "line_items": [ ... ]
+}
+
+Do not include explanations. Do not hallucinate codes or amounts not present in the bill.
+
+Bill text:
+{{bill_text}}

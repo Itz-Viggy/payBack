@@ -1,0 +1,2 @@
+# ORIA hospital index: mapping of hospitals to their ORIA pricing records.
+# Columns (example): hospital_id,name,region,npi,cms_id,oria_dataset_key

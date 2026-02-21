@@ -1,0 +1,6 @@
+.env
+*.md
+!README.md
+!DesignDoc.md
+!Project Structure.md
+!HACKATHON.md

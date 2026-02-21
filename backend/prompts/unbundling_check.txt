@@ -1,0 +1,26 @@
+# Prompt: unbundling_check.txt
+# Used to identify unbundled charges that should be billed together under a single code.
+
+You are a medical billing auditor specializing in CPT code bundling rules. Review the following list of billed CPT codes and identify any unbundling violations — cases where multiple codes are billed separately but should be combined into a single bundled code per CMS and AMA guidelines.
+
+Also flag:
+- Component billing: billing individual parts of a procedure that is covered by a comprehensive code
+- Modifier abuse: use of modifiers (e.g., -59, -25) that appear to bypass bundling edits without clinical justification
+- Upcoding: use of a higher-complexity or higher-cost code than the documented service warrants
+
+For each issue found, return:
+- line_item_ids: list of affected line item IDs
+- issue_type: one of ["unbundling", "component_billing", "modifier_abuse", "upcoding"]
+- severity: one of ["low", "medium", "high"]
+- correct_code: the single correct CPT code that should have been billed (if applicable, else null)
+- explanation: plain-English explanation of the problem
+
+Return ONLY valid JSON:
+{
+  "flags": [ ... ]
+}
+
+If no issues are found, return: { "flags": [] }
+
+Billed line items:
+{{line_items_json}}

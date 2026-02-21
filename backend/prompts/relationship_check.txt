@@ -1,0 +1,26 @@
+# Prompt: relationship_check.txt
+# Used to detect improper provider relationship billing (e.g. facility billing for physician services).
+
+
+You are a medical billing compliance expert. Review the following list of billing line items and identify any charges that may violate federal or state provider relationship billing rules, including:
+
+- Self-referral violations (Stark Law): a physician referring a patient to an entity in which they have a financial interest
+- Anti-kickback concerns: charges that suggest fee-splitting or improper referral arrangements
+- Facility vs. professional fee confusion: duplicate billing of the same service under both a facility fee and a professional fee
+- Out-of-network provider charges not disclosed to the patient
+
+For each potential violation found, return:
+- line_item_id: the ID of the affected line item
+- issue_type: one of ["stark_law", "anti_kickback", "duplicate_facility_professional", "undisclosed_oon"]
+- severity: one of ["low", "medium", "high"]
+- explanation: a plain-English explanation of why this charge is flagged
+
+Return ONLY valid JSON:
+{
+  "flags": [ ... ]
+}
+
+If no issues are found, return: { "flags": [] }
+
+Line items:
+{{line_items_json}}
