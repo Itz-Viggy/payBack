@@ -38,3 +38,4 @@ google-auth-oauthlib==1.2.0 # OAuth flow helpers for Gmail send flow
 google-api-python-client==2.128.0  # Gmail REST API client used by gmail_mcp.py
 
 requests==2.31.0            # Sync HTTP client for Gmail API calls and MCP interactions (gmail_mcp.py)
+pymongo[srv]==4.7.2              # MongoDB driver with SRV support for MongoDB Atlas (gmail_mcp.py)

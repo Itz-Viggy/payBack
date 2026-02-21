@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
 import DecodedBillTable from '../components/DecodedBillTable'
 import FlagCard from '../components/FlagCard'
@@ -202,7 +201,7 @@ export default function Results() {
   }
 
   return (
-    <AppShell contentClassName="pb-24">
+    <section className="pb-24">
       <ProgressTracker activeStep={3} subLabel="Flags found. Review evidence and select charges." />
 
       <section className="surface-panel mt-4 border-border-subtle px-5 py-6 sm:px-8">
@@ -284,6 +283,6 @@ export default function Results() {
           </div>
         </div>
       ) : null}
-    </AppShell>
+    </section>
   )
 }
