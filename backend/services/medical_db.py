@@ -114,7 +114,16 @@ def get_benchmarks(code, insurance_payer):
         return []
 
 def process_entire_bill(bill_json):
-    """Loops through the JSON array and builds the final AI payload."""
+    """
+    Loops through the JSON array and builds the final AI payload.
+
+    Returns dict with:
+      - metadata: patient/account/total info
+      - audited_items: per-line-item billed vs benchmark
+      - extracted_codes: flat list of CPT codes  (for DB storage)
+      - standard_charges: flat list of benchmark dicts (for DB storage)
+      - billed_charges: flat list of floats from the PDF (for DB storage)
+    """
     
     facility = bill_json.get("facility", "Unknown")
     insurance = bill_json.get("insurance", "Unknown")
@@ -122,10 +131,14 @@ def process_entire_bill(bill_json):
     print(f"\n=== 🏥 STARTING AUDIT: {facility} | {insurance} ===\n")
     
     audited_items = []
+    extracted_codes = []
+    standard_charges = []
+    billed_charges = []
     
     # Iterate through the JSON array
     for item in bill_json.get("line_items", []):
         code = item.get("cpt_code")
+        unit_price = float(item.get("unit_price", 0) or 0)
         print(f"Processing: {code} - {item.get('description')}")
         
         benchmarks = get_benchmarks(code, insurance)
@@ -134,6 +147,11 @@ def process_entire_bill(bill_json):
             "billed_item": item,
             "market_benchmarks": benchmarks
         })
+
+        # Build the parallel arrays for MongoDB storage
+        extracted_codes.append(str(code) if code else "")
+        standard_charges.append(benchmarks)
+        billed_charges.append(unit_price)
         
         
     final_payload = {
@@ -142,7 +160,11 @@ def process_entire_bill(bill_json):
             "account": bill_json.get("account_number"),
             "total_billed": bill_json.get("total_billed")
         },
-        "audited_items": audited_items
+        "audited_items": audited_items,
+        # Flat arrays for DB persistence
+        "extracted_codes": extracted_codes,
+        "standard_charges": standard_charges,
+        "billed_charges": billed_charges,
     }
     
     print("\n=== ✅ AUDIT COMPLETE. GENERATING AI PAYLOAD ===")
