@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
 import { api } from '../api/client'
 
@@ -93,7 +92,7 @@ export default function Processing() {
   }, [activeLine])
 
   return (
-    <AppShell>
+    <>
       <ProgressTracker activeStep={1} subLabel={subLabel} />
 
       <section className="mt-6 grid gap-12 lg:grid-cols-[55%_45%]">
@@ -132,7 +131,7 @@ export default function Processing() {
                   ) : active ? (
                     <span className="animate-pulse-dot text-amber">?</span>
                   ) : (
-                    <span className="text-text-muted">•</span>
+                    <span className="text-text-muted">ï¿½</span>
                   )}
 
                   <span className={done || active ? 'text-text-code' : 'text-text-muted'}>{line}</span>
@@ -142,6 +141,6 @@ export default function Processing() {
           </div>
         </div>
       </section>
-    </AppShell>
+    </>
   )
 }

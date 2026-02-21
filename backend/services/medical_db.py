@@ -44,7 +44,7 @@ def get_benchmarks(code, insurance_payer):
     rows = []
     
     # --- ADDED: The Retry Loop ---
-    for limit in [10, 5]:
+    for limit in [10, 5,3]:
         fast_query = f"""
             SELECT hospital_id, payer_name, standard_charge
             FROM `rate`

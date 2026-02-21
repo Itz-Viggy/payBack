@@ -40,6 +40,7 @@ from services.pdf_converter import (
 )
 from services.precedent_service import PrecedentServiceError, search_precedents
 from services.medical_db import process_entire_bill
+from services.rules_engine import run_holistic_review
 
 app = FastAPI(title="PayBack API", version="0.1.0")
 BILLS_STORE: dict[str, dict] = {}
@@ -97,11 +98,23 @@ async def upload_bill(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Gemini extraction failed: {exc}") from exc
 
     print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
-    BILLS_STORE[bill_id] = extracted_data
 
     # Process the entire bill using the medical DB service (for benchmarking, etc.)
-    benchmarks = process_entire_bill(extracted_data)
-    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(benchmarks, indent=2))
+    layer2_payload = process_entire_bill(extracted_data)
+    layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
+    layer2_payload["state"] = extracted_data.get("state") or ""
+    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
+
+    # Layer 3: holistic findings from deterministic rules + Gemini relationship checks.
+    review_result = run_holistic_review(layer2_payload)
+    print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
+
+    BILLS_STORE[bill_id] = {
+        **extracted_data,
+        "flags": review_result["flags"],
+        "summary": review_result["summary"],
+        "benchmarks": layer2_payload.get("audited_items", []),
+    }
     
     return {"billId": bill_id}
 
