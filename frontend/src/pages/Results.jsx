@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import AppShell from '../components/AppShell'
 import { useLocation, useNavigate } from 'react-router-dom'
 import ProgressTracker from '../components/ProgressTracker'
 import DecodedBillTable from '../components/DecodedBillTable'
@@ -164,6 +166,7 @@ const filterOptions = [
 ]
 
 export default function Results() {
+  const { billId } = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const [filter, setFilter] = useState('all')
@@ -254,6 +257,15 @@ export default function Results() {
                 {option.label}
               </button>
             ))}
+            {billId && (
+              <button
+                type="button"
+                onClick={() => navigate(`/results/${billId}/similar-cases`, { state: { report: reportData } })}
+                className="ml-auto rounded-sharp border border-amber-border px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.10em] text-amber transition hover:bg-amber-dim"
+              >
+                VIEW SIMILAR CASES
+              </button>
+            )}
           </div>
 
           <DecodedBillTable
