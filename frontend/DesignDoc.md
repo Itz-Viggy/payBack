@@ -1,4 +1,4 @@
-# ClearCost — Frontend Design Document
+# PayBack — Frontend Design Document
 **v1.1 | Hackathon Edition | React + Tailwind**
 
 ---
@@ -7,7 +7,7 @@
 
 **Aesthetic Direction:** Legal Archive meets Clinical Precision
 
-ClearCost is doing something serious — exposing hospital billing fraud. The design should feel like a **forensic legal tool**: the kind of interface a billing attorney would use. We're pulling from the visual language of government audit documents, law firm letterheads, and financial terminal dashboards.
+PayBack is doing something serious — exposing hospital billing fraud. The design should feel like a **forensic legal tool**: the kind of interface a billing attorney would use. We're pulling from the visual language of government audit documents, law firm letterheads, and financial terminal dashboards.
 
 The tone is: *"We found the errors. Here's the evidence. Send the letter."*
 
@@ -326,7 +326,7 @@ FOOTER STRIP:
 
 ```
 NAV:
-  Left:  "ClearCost" — Syne 800, 18px, var(--text-primary)
+  Left:  "PayBack" — Syne 800, 18px, var(--text-primary)
   Right: "Decode. Dispute. Done." — JBMono 12px / text-secondary
   Separator: 1px solid rgba(232,184,75,0.18)
 
@@ -689,5 +689,5 @@ body {
 
 ---
 
-*ClearCost Design System v1.1 | Hackathon Edition*
+*PayBack Design System v1.1 | Hackathon Edition*
 *"Every number on a medical bill has a story. Make the fraud legible."*

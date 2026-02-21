@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
@@ -19,6 +19,7 @@ export default function Processing() {
   const { billId } = useParams()
   const location = useLocation()
   const [activeLine, setActiveLine] = useState(0)
+  const uploadStartedRef = useRef(false)
 
   const pendingFile = location.state?.file
   const fileName = location.state?.fileName ?? 'uploaded-bill.pdf'
@@ -41,16 +42,17 @@ export default function Processing() {
           return
         }
 
+        if (uploadStartedRef.current) return
+        uploadStartedRef.current = true
+
         setActiveLine(2)
         try {
           const response = await api.uploadBill(pendingFile)
-          if (cancelled) return
           navigate(`/processing/${response.billId}`, {
             replace: true,
             state: { fileName },
           })
         } catch (error) {
-          if (cancelled) return
           navigate('/', {
             replace: true,
             state: { uploadError: error.message || 'Upload failed. Please try again.' },
