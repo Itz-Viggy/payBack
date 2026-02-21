@@ -63,6 +63,8 @@ async function updateStatus(analysisId, status) {
     throw new Error('Failed to update status.');
   }
   return response.json();
+}
+
 async function getPrecedents(billId, topK = 5) {
   let response;
   try {
