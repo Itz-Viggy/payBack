@@ -180,12 +180,26 @@ async function generateDisputeLetter({ billId, selectedItemIds, patientDetails, 
   return payload;
 }
 
+/**
+ * Fetch a single analysis record by its MongoDB analysis_id.
+ * Used by resume-flow pages to hydrate from the status dashboard.
+ * Returns the full analysis doc including status.
+ */
+async function getAnalysis(analysisId) {
+  const response = await fetch(`${baseURL}/api/history/analysis/${analysisId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch analysis.');
+  }
+  return response.json();
+}
+
 export const api = {
   baseURL,
   uploadBill,
   getBill,
   getBillStatus,
   getHistory,
+  getAnalysis,
   updateStatus,
   getPrecedents,
   searchPrecedents,

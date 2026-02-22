@@ -54,12 +54,12 @@ fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name="bill_files")
 # ---------------------------------------------------------------------------
 
 class DisputeStatus(str, Enum):
-    pending          = "pending"
-    email_sent       = "email_sent"
-    waiting_response = "waiting_response"
-    denied           = "denied"
-    success          = "success"
-    closed           = "closed"
+    # Active pipeline steps — map 1:1 to frontend routes
+    reviewing_markup  = "reviewing_markup"   # user on /results — reviewing OCR vs DB prices
+    drafting_dispute  = "drafting_dispute"   # user on /draft   — editing the AI letter
+    pending_response  = "pending_response"   # letter sent; waiting on hospital
+    # Terminal state
+    closed            = "closed"
 
 
 class PipelinePayload(BaseModel):
@@ -74,7 +74,7 @@ class PipelinePayload(BaseModel):
 
 
 class StatusUpdateBody(BaseModel):
-    """Body for PATCH status endpoint."""
+    """Body for PATCH status endpoint. Accepts any DisputeStatus value."""
     status: DisputeStatus
 
 
@@ -94,7 +94,7 @@ class AnalysisSummary(BaseModel):
     extracted_codes: list[str] = []
     standard_charges: list[Any] = []
     billed_charges: list[float] = []
-    status: str = "pending"
+    status: str = "reviewing_markup"
     created_at: str
     updated_at: str | None = None
 
@@ -146,7 +146,7 @@ async def store_bill_analysis(
     # 3. Insert linked dispute_statuses document
     status_doc = {
         "bill_analysis_id": analysis_id,
-        "status": DisputeStatus.pending.value,
+        "status": DisputeStatus.reviewing_markup.value,
         "updated_at": now,
     }
     status_result = await dispute_statuses_col.insert_one(status_doc)
@@ -282,3 +282,60 @@ async def update_dispute_status(analysis_id: str, body: StatusUpdateBody):
         raise HTTPException(status_code=404, detail="No dispute found for this analysis ID")
 
     return {"updated": True, "analysis_id": analysis_id, "new_status": body.status.value}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/history/analysis/{analysis_id}
+# ---------------------------------------------------------------------------
+@router.get("/analysis/{analysis_id}")
+async def get_analysis(analysis_id: str):
+    """
+    Return the full bill_analysis document joined with its current dispute status.
+    Used by resume-flow pages (Results, DraftReview) to hydrate from an analysis_id.
+    """
+    try:
+        oid = ObjectId(analysis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid analysis_id format")
+
+    pipeline = [
+        {"$match": {"_id": oid}},
+        {
+            "$lookup": {
+                "from": "dispute_statuses",
+                "localField": "_id",
+                "foreignField": "bill_analysis_id",
+                "as": "dispute",
+            }
+        },
+        {"$unwind": {"path": "$dispute", "preserveNullAndEmptyArrays": True}},
+    ]
+
+    doc = None
+    async for row in bill_analyses_col.aggregate(pipeline):
+        doc = row
+        break
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    return {
+        "id": str(doc["_id"]),
+        "file_id": str(doc.get("file_id", "")),
+        "hospital_name": doc.get("hospital_name"),
+        "total_billed": doc.get("total_billed"),
+        "estimated_overcharge": doc.get("estimated_overcharge"),
+        "extracted_codes": doc.get("extracted_codes", []),
+        "standard_charges": doc.get("standard_charges", []),
+        "billed_charges": doc.get("billed_charges", []),
+        "raw_ocr_text": doc.get("raw_ocr_text", ""),
+        "status": doc.get("dispute", {}).get("status", DisputeStatus.reviewing_markup.value)
+        if doc.get("dispute")
+        else DisputeStatus.reviewing_markup.value,
+        "created_at": doc["created_at"].isoformat()
+        if isinstance(doc.get("created_at"), datetime)
+        else str(doc.get("created_at", "")),
+        "updated_at": doc["dispute"]["updated_at"].isoformat()
+        if doc.get("dispute") and isinstance(doc["dispute"].get("updated_at"), datetime)
+        else None,
+    }
