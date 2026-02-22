@@ -234,7 +234,7 @@ function PrecedentDetailModal({ precedent, onClose }) {
 }
 
 export default function Results() {
-  const { billId } = useParams()
+  const { billId, analysisId } = useParams()   // analysisId present on resume flow
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -242,13 +242,16 @@ export default function Results() {
   const [error, setError] = useState(null)
   const [reportData, setReportData] = useState(null)
   const [lineItems, setLineItems] = useState([])
+  // Track the MongoDB analysisId so we can advance status on "Build Dispute"
+  const [resolvedAnalysisId, setResolvedAnalysisId] = useState(analysisId ?? null)
 
   const [filter, setFilter] = useState('all')
   const [selectedItemIds, setSelectedItemIds] = useState([])
 
-  /* ── Fetch real bill data from backend ────────────────────────────── */
+  /* ── Fetch bill data — supports both new-bill (billId) and resume (analysisId) ── */
   useEffect(() => {
-    if (!billId) {
+    const id = billId ?? analysisId
+    if (!id) {
       setError('No bill ID provided.')
       setLoading(false)
       return
@@ -257,7 +260,37 @@ export default function Results() {
     let cancelled = false
     ;(async () => {
       try {
-        const bill = await api.getBill(billId)
+        let bill
+
+        if (analysisId) {
+          // Resume flow: load from MongoDB via analysis_id
+          const record = await api.getAnalysis(analysisId)
+          // Reshape the flat analysis record into the shape buildLineItems/buildReportData expect.
+          // standard_charges is stored as the benchmarks array of arrays; we zip it back into
+          // audited_items so the existing helpers can consume it unchanged.
+          const auditedItems = (record.extracted_codes || []).map((code, i) => ({
+            billed_item: {
+              cpt_code: code,
+              patient_owed: (record.billed_charges || [])[i] ?? 0,
+              description: '',
+              line_item_id: i + 1,
+            },
+            market_benchmarks: (record.standard_charges || [])[i] ?? [],
+          }))
+          bill = {
+            facility: record.hospital_name,
+            total_patient_billed: record.total_billed,
+            benchmarks: auditedItems,
+            flags: [],
+          }
+          setResolvedAnalysisId(analysisId)
+        } else {
+          // New-bill flow: load from in-memory BILLS_STORE via bill_id
+          bill = await api.getBill(billId)
+          // Attach the analysisId that was stored alongside the bill (set by _run_pipeline)
+          if (bill.analysisId) setResolvedAnalysisId(bill.analysisId)
+        }
+
         if (cancelled) return
 
         const items = buildLineItems(bill.benchmarks || [], bill.flags || [])
@@ -265,7 +298,6 @@ export default function Results() {
 
         setLineItems(items)
         setReportData(report)
-        // Pre-select all flagged items
         setSelectedItemIds(items.filter((i) => i.severity !== 'clear').map((i) => i.id))
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load bill data.')
@@ -275,7 +307,7 @@ export default function Results() {
     })()
 
     return () => { cancelled = true }
-  }, [billId])
+  }, [billId, analysisId])
 
   const flaggedItems = useMemo(
     () => lineItems.filter((item) => item.severity !== 'clear').slice(0, 3),
@@ -322,12 +354,22 @@ export default function Results() {
     )
   }
 
-  const handleBuildDispute = () => {
-    navigate(`/dispute/${billId}`, {
+  const handleBuildDispute = async () => {
+    // Advance the state-machine to drafting_dispute so the status dashboard
+    // can route the user back to the draft page if they abandon mid-flow.
+    if (resolvedAnalysisId) {
+      try {
+        await api.updateStatus(resolvedAnalysisId, 'drafting_dispute')
+      } catch {
+        // Non-fatal — proceed regardless
+      }
+    }
+    navigate(`/dispute/${billId ?? resolvedAnalysisId}`, {
       state: {
         report: reportData,
         selectedItems,
         selectedItemIds,
+        analysisId: resolvedAnalysisId,
         sourceFileName: location.state?.fileName ?? 'uploaded-bill.pdf',
       },
     })
