@@ -1,0 +1,5 @@
+{"sessionId": "f61d1b", "location": "main.py", "message": "startup env check", "data": {"cwd": "/Users/sujankatari/Projects/Hackathon/Payback/backend", "backend_dir": "/Users/sujankatari/Projects/Hackathon/Payback/backend", "dotenv_exists": true, "GEMINI_API_KEY_set": true}, "hypothesisId": "H1", "timestamp": 1771724578810.441}
+{"sessionId": "f61d1b", "location": "gemini_service.py", "message": "_configure_model", "data": {"api_key_is_set": true, "api_key_len": 39}, "hypothesisId": "H1", "timestamp": 1771724649588.353}
+{"sessionId": "f61d1b", "location": "gemini_service.py", "message": "_configure_model", "data": {"api_key_is_set": true, "api_key_len": 39}, "hypothesisId": "H1", "timestamp": 1771724775652.698}
+{"sessionId": "f61d1b", "location": "gemini_service.py", "message": "_configure_model", "data": {"api_key_is_set": true, "api_key_len": 39}, "hypothesisId": "H1", "timestamp": 1771724787322.571}
+{"sessionId": "f61d1b", "location": "gemini_service.py", "message": "_configure_model", "data": {"api_key_is_set": true, "api_key_len": 39}, "hypothesisId": "H1", "timestamp": 1771724792954.507}
