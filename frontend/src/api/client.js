@@ -65,6 +65,18 @@ async function updateStatus(analysisId, status) {
   return response.json();
 }
 
+/**
+ * Fetch a single bill's full analysis: extracted data + benchmarks + flags.
+ * @param {string} billId - The bill ID returned from upload.
+ */
+async function getBill(billId) {
+  const response = await fetch(`${baseURL}/bills/${billId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch bill data.');
+  }
+  return response.json();
+}
+
 async function getPrecedents(billId, topK = 5) {
   let response;
   try {
@@ -122,6 +134,7 @@ async function searchPrecedents(query, topK = 5) {
 export const api = {
   baseURL,
   uploadBill,
+  getBill,
   getHistory,
   updateStatus,
   getPrecedents,
