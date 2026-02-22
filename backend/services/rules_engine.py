@@ -102,8 +102,8 @@ def run_rules(layer2_payload: dict[str, Any]) -> list[dict[str, Any]]:
                     rule_name="duplicate_charge",
                     line_item_ids=sorted(ids),
                     severity="high",
-                    message=f"CPT {cpt_code} appears multiple times on {date_of_service}.",
-                    citation="Duplicate billing review",
+                    message=f"CPT {cpt_code} appears multiple times on {date_of_service}. May indicate duplicate billing or unbundling (multiple charges for one service).",
+                    citation="Duplicate billing / unbundling review",
                 )
             )
 

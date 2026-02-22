@@ -23,6 +23,14 @@ function classifySeverityByMarkup(markup) {
   return 'clear'
 }
 
+const SEVERITY_ORDER = { low: 1, medium: 2, high: 3 }
+
+function pickWorstSeverity(a, b) {
+  if (!a || a === 'clear') return b
+  if (!b || b === 'clear') return a
+  return SEVERITY_ORDER[a] >= SEVERITY_ORDER[b] ? a : b
+}
+
 function buildLineItems(benchmarks, flags) {
   return benchmarks.map((entry, idx) => {
     const item = entry.billed_item || {}
@@ -34,15 +42,26 @@ function buildLineItems(benchmarks, flags) {
       : 0
     const markup = bestBench > 0 ? +(billed / bestBench).toFixed(2) : 0
 
-    // Don't flag when billed equals benchmark (within small tolerance)
     const sameValue = bestBench > 0 && Math.abs(billed - bestBench) < 0.01
-    const severity = sameValue ? 'clear' : classifySeverityByMarkup(markup)
+    const markupSeverity = sameValue ? 'clear' : classifySeverityByMarkup(markup)
 
-    // Find the first flag that references this line item
-    const lineId = item.line_item_id
-    const matchingFlag = flags.find((f) => (f.line_item_ids || []).includes(lineId))
-    // Severity is based on markup only; matchingFlag adds reason/citation but not severity
-    const finalSeverity = sameValue ? 'clear' : severity
+    const lineId = item.line_item_id ?? idx + 1
+    const matchingFlags = (flags || []).filter((f) =>
+      (f.line_item_ids || []).some((fid) => fid == lineId)
+    )
+    const flagReasons = matchingFlags.map((f) => ({
+      rule: f.rule_name || 'suspicious',
+      message: f.message || 'Billing rule triggered',
+      severity: f.severity || 'medium',
+    }))
+
+    const flagSeverity = matchingFlags.length
+      ? matchingFlags.reduce((worst, f) => pickWorstSeverity(worst, f.severity || 'medium'), null)
+      : null
+
+    const finalSeverity = pickWorstSeverity(markupSeverity, flagSeverity) || markupSeverity
+    const primaryReason = flagReasons[0]?.message || (finalSeverity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.')
+    const primaryCitation = matchingFlags[0]?.citation || (finalSeverity === 'clear' ? '' : '')
 
     const overcharge = Math.max(0, billed - bestBench)
 
@@ -56,10 +75,11 @@ function buildLineItems(benchmarks, flags) {
       markup,
       overcharge,
       severity: finalSeverity,
-      reason: sameValue ? 'Within expected benchmark range.' : (matchingFlag?.message || (finalSeverity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.')),
-      citation: sameValue ? '' : (matchingFlag?.citation || (finalSeverity === 'clear' ? '' : '')),
-      negotiated: bestBench,   // best available proxy
-      medicare: bestBench,     // best available proxy
+      flagReasons: flagReasons.length ? flagReasons : null,
+      reason: primaryReason,
+      citation: primaryCitation,
+      negotiated: bestBench,
+      medicare: bestBench,
     }
   })
 }

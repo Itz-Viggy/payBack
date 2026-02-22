@@ -1,6 +1,24 @@
 import { Fragment, useMemo, useState } from 'react'
 import { formatCurrency, formatCurrencyDetailed, formatOvercharge } from '../utils/format'
 
+const RULE_LABELS = {
+  duplicate_charge: 'Duplicate code',
+  quantity_anomaly: 'Quantity anomaly',
+  extreme_markup: 'Extreme markup',
+  facility_fee: 'Facility fee',
+  discharge_day_bill: 'Discharge day billing',
+  upcoding: 'Upcoding',
+  unbundling: 'Unbundling',
+  component_billing: 'Component billing (multiple charges for 1)',
+  modifier_abuse: 'Modifier abuse',
+  relationship_issue: 'Relationship issue',
+  suspicious: 'Suspicious',
+}
+
+function getRuleLabel(rule) {
+  return RULE_LABELS[rule] || String(rule).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 const severityConfig = {
   high: {
     rowBg: 'bg-flag-high-dim',
@@ -138,9 +156,22 @@ export default function DecodedBillTable({
                       >
                         <div className="grid gap-6 md:grid-cols-2">
                           <div>
-                            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">What this means</p>
-                            <p className="mt-2 font-display text-sm leading-6 text-text-primary">{item.reason}</p>
-                            <p className="mt-2 font-display text-[13px] text-text-secondary">{item.citation}</p>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Why it was flagged</p>
+                            {item.flagReasons?.length ? (
+                              <ul className="mt-2 space-y-2 font-display text-sm leading-6 text-text-primary">
+                                {item.flagReasons.map((fr, i) => (
+                                  <li key={i}>
+                                    <span className="font-semibold text-flag-medium">{getRuleLabel(fr.rule)}: </span>
+                                    {fr.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-2 font-display text-sm leading-6 text-text-primary">{item.reason}</p>
+                            )}
+                            {item.citation ? (
+                              <p className="mt-2 font-display text-[13px] text-text-secondary">{item.citation}</p>
+                            ) : null}
                           </div>
 
                           <div>
