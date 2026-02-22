@@ -13,6 +13,8 @@ import Processing from './pages/Processing'
 import Results from './pages/Results'
 import Dispute from './pages/Dispute'
 import Send from './pages/Send'
+import DraftReview from './pages/DraftReview'
+
 const router = createBrowserRouter([
   {
     path: '/',
@@ -22,9 +24,14 @@ const router = createBrowserRouter([
       { path: 'status', element: <Status /> },
       { path: 'history', element: <HistoryPage /> },
       { path: 'processing/:billId?', element: <Processing /> },
-      { path: 'results/:billId?', element: <Results /> },
+      // Resume flow MUST be listed before :billId so "analysis" isn't swallowed as a billId
+      { path: 'results/analysis/:analysisId', element: <Results /> },
+      // New-bill flow: /results/:billId (in-memory bill from upload)
+      { path: 'results/:billId', element: <Results /> },
       { path: 'dispute/:caseId?', element: <Dispute /> },
       { path: 'send/:caseId?', element: <Send /> },
+      // Resume-draft flow: /draft/:analysisId
+      { path: 'draft/:analysisId', element: <DraftReview /> },
     ],
   },
   {
@@ -36,3 +43,4 @@ const router = createBrowserRouter([
 export default function App() {
   return <RouterProvider router={router} />
 }
+

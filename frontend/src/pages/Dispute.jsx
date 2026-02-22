@@ -41,6 +41,8 @@ export default function Dispute() {
   const { caseId: billId } = useParams()
   const report = location.state?.report ?? fallbackReport
   const items = location.state?.selectedItems?.length ? location.state.selectedItems : fallbackItems
+  // analysisId is passed via state from both Results.jsx and DraftReview.jsx
+  const analysisId = location.state?.analysisId ?? null
 
   const [patientDetails, setPatientDetails] = useState({
     fullName: '',
@@ -124,6 +126,11 @@ export default function Dispute() {
           report,
           lawsCited: citedLaws,
           letterText: result.letterText,
+          analysisId,
+        }
+        // Advance state machine: letter drafted → pending hospital response
+        if (analysisId) {
+          try { await api.updateStatus(analysisId, 'pending_response') } catch { /* non-fatal */ }
         }
         navigate(`/send/${billId}`, { state: { draft } })
         return
@@ -141,6 +148,11 @@ export default function Dispute() {
       report,
       lawsCited: citedLaws,
       letterText,
+      analysisId,
+    }
+    // Advance state machine even for the static template path
+    if (analysisId) {
+      try { await api.updateStatus(analysisId, 'pending_response') } catch { /* non-fatal */ }
     }
     navigate(`/send/${billId || 'case'}`, { state: { draft } })
     setIsGenerating(false)
