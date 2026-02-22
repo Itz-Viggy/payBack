@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
-import { History, CheckCircle, XCircle, DollarSign, Clock, Loader2 } from 'lucide-react'
+import { History, CheckCircle, XCircle, DollarSign, TrendingDown, Loader2, Hash } from 'lucide-react'
 import { api } from '../api/client'
 
 const statusConfig = {
-  success: {
-    label: 'Resolved',
+  approved: {
+    label: 'Approved',
     icon: CheckCircle,
     color: 'text-status-resolved',
     bg: 'bg-[rgba(90,158,111,0.1)]',
     border: 'border-[rgba(90,158,111,0.25)]',
   },
   closed: {
-    label: 'Closed',
+    label: 'Approved',
     icon: CheckCircle,
     color: 'text-status-resolved',
     bg: 'bg-[rgba(90,158,111,0.1)]',
@@ -24,30 +24,9 @@ const statusConfig = {
     bg: 'bg-[rgba(217,79,79,0.1)]',
     border: 'border-[rgba(217,79,79,0.25)]',
   },
-  pending: {
-    label: 'Pending',
-    icon: Clock,
-    color: 'text-status-pending',
-    bg: 'bg-[rgba(140,137,127,0.1)]',
-    border: 'border-[rgba(140,137,127,0.25)]',
-  },
-  email_sent: {
-    label: 'Email Sent',
-    icon: Clock,
-    color: 'text-status-response',
-    bg: 'bg-[rgba(107,143,196,0.1)]',
-    border: 'border-[rgba(107,143,196,0.25)]',
-  },
-  waiting_response: {
-    label: 'Awaiting Response',
-    icon: Clock,
-    color: 'text-status-response',
-    bg: 'bg-[rgba(107,143,196,0.1)]',
-    border: 'border-[rgba(107,143,196,0.25)]',
-  },
 }
 
-const fallbackConfig = statusConfig.pending
+const fallbackConfig = statusConfig.approved
 
 export default function HistoryPage() {
   const [allAnalyses, setAllAnalyses] = useState([])
@@ -55,19 +34,26 @@ export default function HistoryPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.getHistory()
+    api.getDemoHistory()
       .then(setAllAnalyses)
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
   }, [])
 
-  const totalSavings = allAnalyses.reduce(
+  const approvedCases = allAnalyses.filter(
+    (d) => d.status === 'approved' || d.status === 'closed'
+  )
+  const deniedCases = allAnalyses.filter((d) => d.status === 'denied')
+
+  const totalEstOvercharges = allAnalyses.reduce(
     (sum, d) => sum + (d.estimated_overcharge || 0),
     0
   )
-  const resolvedCount = allAnalyses.filter(
-    (d) => d.status === 'success' || d.status === 'closed'
-  ).length
+  // Amount recuperated = total billed on approved disputes
+  const amountRecuperated = approvedCases.reduce(
+    (sum, d) => sum + (d.estimated_overcharge || 0),
+    0
+  )
 
   return (
     <section className="py-6">
@@ -76,40 +62,52 @@ export default function HistoryPage() {
           DISPUTE HISTORY
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold text-text-primary">
-          All Cases
+          Closed Cases
         </h1>
         <p className="mt-2 font-display text-sm text-text-secondary">
-          View all disputes and track your total savings.
+          Resolved disputes where hospitals have issued a final decision.
         </p>
       </div>
 
       {/* Summary Cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-lg border border-border-subtle bg-bg-surface p-5">
           <div className="flex items-center gap-3">
             <DollarSign className="h-5 w-5 text-amber" />
             <span className="font-mono text-xs uppercase text-text-muted">Est. Overcharges</span>
           </div>
           <p className="mt-2 font-mono text-2xl font-semibold text-amber">
-            ${totalSavings.toLocaleString()}
+            ${totalEstOvercharges.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </p>
         </div>
+
+        <div className="rounded-lg border border-border-subtle bg-bg-surface p-5">
+          <div className="flex items-center gap-3">
+            <TrendingDown className="h-5 w-5 text-status-resolved" />
+            <span className="font-mono text-xs uppercase text-text-muted">Recuperated</span>
+          </div>
+          <p className="mt-2 font-mono text-2xl font-semibold text-status-resolved">
+            ${amountRecuperated.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </p>
+        </div>
+
         <div className="rounded-lg border border-border-subtle bg-bg-surface p-5">
           <div className="flex items-center gap-3">
             <CheckCircle className="h-5 w-5 text-status-resolved" />
-            <span className="font-mono text-xs uppercase text-text-muted">Resolved</span>
+            <span className="font-mono text-xs uppercase text-text-muted">Approved</span>
           </div>
           <p className="mt-2 font-mono text-2xl font-semibold text-status-resolved">
-            {resolvedCount}
+            {approvedCases.length}
           </p>
         </div>
+
         <div className="rounded-lg border border-border-subtle bg-bg-surface p-5">
           <div className="flex items-center gap-3">
-            <History className="h-5 w-5 text-text-secondary" />
-            <span className="font-mono text-xs uppercase text-text-muted">Total Cases</span>
+            <XCircle className="h-5 w-5 text-status-denied" />
+            <span className="font-mono text-xs uppercase text-text-muted">Denied</span>
           </div>
-          <p className="mt-2 font-mono text-2xl font-semibold text-text-primary">
-            {allAnalyses.length}
+          <p className="mt-2 font-mono text-2xl font-semibold text-status-denied">
+            {deniedCases.length}
           </p>
         </div>
       </div>
@@ -127,10 +125,10 @@ export default function HistoryPage() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-border-subtle bg-bg-surface py-16 text-center">
           <History className="h-12 w-12 text-text-muted" />
           <p className="mt-4 font-display text-lg text-text-secondary">
-            No cases yet
+            No closed cases yet
           </p>
           <p className="mt-1 font-mono text-xs text-text-muted">
-            Upload a bill from the Home page to get started.
+            Cases appear here once marked as Approved or Denied.
           </p>
         </div>
       ) : (
@@ -151,7 +149,7 @@ export default function HistoryPage() {
                   Est. Overcharge
                 </th>
                 <th className="px-5 py-3 text-center font-mono text-[10px] uppercase tracking-wider text-text-muted">
-                  Codes
+                  Codes Flagged
                 </th>
                 <th className="px-5 py-3 text-center font-mono text-[10px] uppercase tracking-wider text-text-muted">
                   Status
@@ -178,7 +176,9 @@ export default function HistoryPage() {
                     </td>
                     <td className="px-5 py-4 text-right">
                       <span className="font-mono text-sm text-text-secondary">
-                        {item.total_billed != null ? `$${item.total_billed.toLocaleString()}` : '—'}
+                        {item.total_billed != null
+                          ? `$${Number(item.total_billed).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : '—'}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-right">
@@ -188,13 +188,13 @@ export default function HistoryPage() {
                         }`}
                       >
                         {item.estimated_overcharge != null
-                          ? `$${item.estimated_overcharge.toLocaleString()}`
+                          ? `$${Number(item.estimated_overcharge).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : '—'}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-center">
                       <span className="font-mono text-xs text-text-secondary">
-                        {item.extracted_codes?.length || 0}
+                        {item.num_codes_flagged ?? item.extracted_codes?.length ?? 0}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-center">

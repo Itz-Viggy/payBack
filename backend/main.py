@@ -160,7 +160,7 @@ async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, 
         # ── Persist to MongoDB ─────────────────────────────────────────────
         raw_ocr_text = converted.text or ""
         hospital_name = extracted_data.get("facility")
-        total_billed = extracted_data.get("total_billed")
+        total_billed = extracted_data.get("total_patient_billed") or extracted_data.get("total_billed")
 
         estimated_overcharge = 0.0
         for audited in layer2_payload.get("audited_items", []):

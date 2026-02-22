@@ -39,7 +39,7 @@ async def get_benchmarks(client: httpx.AsyncClient, code: str, insurance_payer: 
 
     # Cascading retry with decreasing LIMIT values
     async with _SEMAPHORE:
-        for limit in [10, 5, 2]:
+        for limit in [5, 2]:
             query = f"""
                 SELECT hospital_id, payer_name, standard_charge
                 FROM `rate`
