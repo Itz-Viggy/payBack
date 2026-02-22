@@ -138,7 +138,7 @@ def process_entire_bill(bill_json):
     # Iterate through the JSON array
     for item in bill_json.get("line_items", []):
         code = item.get("cpt_code")
-        unit_price = float(item.get("unit_price", 0) or 0)
+        unit_price = float(item.get("patient_owed", 0) or 0)  # Updated to use patient_owed
         print(f"Processing: {code} - {item.get('description')}")
         
         benchmarks = get_benchmarks(code, insurance)
@@ -151,14 +151,13 @@ def process_entire_bill(bill_json):
         # Build the parallel arrays for MongoDB storage
         extracted_codes.append(str(code) if code else "")
         standard_charges.append(benchmarks)
-        billed_charges.append(unit_price)
-        
-        
+        billed_charges.append(unit_price)  # Updated to use patient_owed
+
     final_payload = {
         "metadata": {
             "patient": bill_json.get("patient_name"),
             "account": bill_json.get("account_number"),
-            "total_billed": bill_json.get("total_patient_billed") or bill_json.get("total_billed")
+            "total_billed": bill_json.get("total_patient_billed") or bill_json.get("patient_owed")  # Updated to prioritize patient_owed
         },
         "audited_items": audited_items,
         # Flat arrays for DB persistence
