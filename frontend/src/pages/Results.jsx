@@ -7,12 +7,6 @@ import { api } from '../api/client'
 import { formatCurrency, formatDateShort } from '../utils/format'
 
 
-const severityBadge = {
-  high: 'border-flag-high-border bg-flag-high-dim text-flag-high',
-  medium: 'border-flag-medium-border bg-flag-medium-dim text-flag-medium',
-  low: 'border-flag-low-border bg-flag-low-dim text-flag-low',
-}
-
 /* ── helpers to transform backend shapes into component shapes ──────── */
 
 function classifySeverityByMarkup(markup) {
@@ -126,8 +120,6 @@ function buildPrecedentQuery(items) {
 
 function CompactPrecedentCard({ precedent, onClick }) {
   const { score, payload } = precedent
-  const severity = payload?.severity ?? 'low'
-  const badge = severityBadge[severity] ?? severityBadge.low
   const summary = payload?.summary ?? ''
   const truncated = summary.length > 80 ? `${summary.slice(0, 80)}…` : summary
 
@@ -141,11 +133,6 @@ function CompactPrecedentCard({ precedent, onClick }) {
         <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
           {Math.round((score ?? 0) * 100)}% MATCH
         </span>
-        <span
-          className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
-        >
-          {severity}
-        </span>
       </div>
       <p className="mt-2 font-display text-[13px] leading-6 text-text-secondary line-clamp-3">{truncated}</p>
     </button>
@@ -155,8 +142,6 @@ function CompactPrecedentCard({ precedent, onClick }) {
 function PrecedentDetailModal({ precedent, onClose }) {
   if (!precedent) return null
   const { score, payload } = precedent
-  const severity = payload?.severity ?? 'low'
-  const badge = severityBadge[severity] ?? severityBadge.low
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -168,11 +153,6 @@ function PrecedentDetailModal({ precedent, onClose }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
               {Math.round((score ?? 0) * 100)}% MATCH
-            </span>
-            <span
-              className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
-            >
-              {severity}
             </span>
             {payload?.issue_type && (
               <span className="font-mono text-[10px] uppercase tracking-[0.10em] text-text-muted">

@@ -3,9 +3,15 @@
 
 You are a patient advocate helping write a formal medical bill dispute letter. Using the case details below, write a professional, firm, and factual dispute letter from the patient to the hospital billing department.
 
+FORMAT INSTRUCTIONS:
+- Use only the data provided below. Do NOT include placeholder text in brackets such as [Your Address], [Your Phone Number], [Date], [Hospital Street Address], [Patient's Email], etc. If a piece of information is not provided, omit it entirely rather than using a bracket placeholder.
+- Use a simple header: address the letter to "[Facility] Billing Department" (using the facility name provided).
+- Use a simple Subject line and closing. Sign off with only the patient's name (use the patient_name provided). Do not add extra bracketed fields for address, phone, or email.
+- Keep the letter body as the main content; avoid lengthy letterhead or signature blocks with placeholders.
+
 The letter must:
-- Be addressed formally to the billing department
-- Open by identifying the patient, account number, and date of service
+- Be addressed formally to the facility's billing department
+- Open by identifying the patient, account number, and date of service (from the case details)
 - For each flagged charge, clearly state: the charge description, the amount billed, the reason it is being disputed, and (where applicable) the fair market price benchmark
 - Incorporate the rules engine findings listed below. For each finding that applies to a disputed charge, explain the issue in the letter. Examples:
   - duplicate_charge → "CPT [code] appears to have been billed multiple times for the same date of service."
@@ -18,7 +24,7 @@ The letter must:
   - relationship_issue → State the identified provider relationship billing concern.
 - Cite relevant regulations where appropriate (e.g., No Surprises Act, Stark Law, CMS bundling rules, NCCI edits)
 - Request a corrected itemized bill and written response within 30 days
-- Close professionally with the patient's contact information placeholder
+- Close with "Sincerely," followed by the patient's name (from the case details). Do not add contact placeholders.
 
 Tone: firm but respectful. Do not use accusatory language. Focus on facts and patient rights.
 
