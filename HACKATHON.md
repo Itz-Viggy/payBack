@@ -17,11 +17,11 @@ Use this to split work and track what’s done.
 - [ ] **ORIA / hospital matcher** — use `oria_hospital_index.csv` and oria_db
 - [ ] **Rules engine** — flag upcoding, duplicates, unbundling
 - [ ] **Case builder** — assemble dispute case from selected flags
-- [ ] **Dispute letter** — prompt + email formatter; Gmail send (optional MCP)
+- [ ] **Dispute letter** — prompt + email formatter; user opens draft or copies to clipboard
 
 ## Frontend (React)
 
-- [ ] **API client** — `uploadBill`, `getAnalysisResult`, `buildDisputeCase`, `sendDisputeEmail` in `src/api/client.js`
+- [ ] **API client** — `uploadBill`, `getAnalysisResult`, `getPrecedents`, `searchPrecedents` in `src/api/client.js`
 - [ ] **Upload page** — `BillUploader`, call upload + navigate to Results with `billId`
 - [ ] **Results page** — decode table, flags, “Dispute” CTA to Dispute page
 - [ ] **Dispute page** — select flags, preview letter, send email; use `DesignDoc.md` for UI

@@ -5,7 +5,7 @@ Project overview, setup instructions, and architecture summary for the PayBack m
 ## Structure
 
 - **frontend/** — React/Vite app: upload bills, view decoded results and flags, build and send dispute emails.
-- **backend/** — FastAPI app: bill upload, Gemini extraction & analysis, ORIA benchmarks, rules engine, case building, MongoDB persistence, Gmail MCP for sending dispute letters.
+- **backend/** — FastAPI app: bill upload, Gemini extraction & analysis, ORIA benchmarks, rules engine, case building, MongoDB persistence.
 
 ## Prerequisites
 
@@ -40,10 +40,10 @@ Project overview, setup instructions, and architecture summary for the PayBack m
 
 ## Architecture
 
-Upload → PDF/image conversion → Gemini extraction → ORIA/hospital matching & rules engine → flagged charges → case builder → dispute letter prompt → email formatter → Gmail MCP send. Bills and cases stored in MongoDB.
+Upload → PDF/image conversion → Gemini extraction → ORIA/hospital matching & rules engine → flagged charges → case builder → dispute letter prompt → email formatter. Bills and cases stored in MongoDB. Users open an email draft or copy to clipboard.
 
 ## Current state (hackathon skeleton)
 
 - **Backend:** FastAPI app runs with CORS and `/health`; service modules and routes are stubs — implement in `backend/main.py` and `backend/services/`.
 - **Frontend:** React app mounts with routes (`/`, `/results/:billId`, `/dispute/:caseId`); pages and components are stubs — implement per `frontend/DesignDoc.md`.
-- **API client:** `frontend/src/api/client.js` is a placeholder — add `uploadBill`, `getAnalysisResult`, `buildDisputeCase`, `sendDisputeEmail` using `VITE_API_BASE_URL`.
+- **API client:** `frontend/src/api/client.js` — `uploadBill`, `getAnalysisResult`, `getPrecedents`, `searchPrecedents`, etc. using `VITE_API_BASE_URL`.

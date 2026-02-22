@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react'
-import { formatCurrency, formatCurrencyDetailed, formatMarkup } from '../utils/format'
+import { formatCurrency, formatCurrencyDetailed, formatOvercharge } from '../utils/format'
 
 const severityConfig = {
   high: {
@@ -32,10 +32,10 @@ const severityConfig = {
   },
 }
 
-function getStatusClass(markup) {
-  if (markup > 10) return 'text-flag-high'
-  if (markup >= 5) return 'text-flag-medium'
-  if (markup >= 2) return 'text-flag-low'
+function getOverchargeSeverityClass(markup) {
+  if (markup > 3) return 'text-flag-high'
+  if (markup > 1.5) return 'text-flag-medium'
+  if (markup > 1) return 'text-flag-low'
   return 'text-text-secondary'
 }
 
@@ -77,8 +77,8 @@ export default function DecodedBillTable({
               <th className="px-5 text-center font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Qty</th>
               <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Billed</th>
               <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Benchmark</th>
-              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Markup</th>
-              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Status</th>
+              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Overcharge</th>
+              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Severity</th>
             </tr>
           </thead>
           <tbody>
@@ -114,8 +114,8 @@ export default function DecodedBillTable({
                     <td className="px-5 text-right font-mono text-sm text-text-secondary">
                       {formatCurrency(item.benchmark)}
                     </td>
-                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getStatusClass(item.markup)}`}>
-                      {formatMarkup(item.markup)}
+                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getOverchargeSeverityClass(item.markup)}`}>
+                      ${formatOvercharge(item.billed, item.benchmark)}
                     </td>
                     <td className="px-5 text-right">
                       {item.severity === 'clear' ? (

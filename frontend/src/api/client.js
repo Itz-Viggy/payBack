@@ -131,15 +131,63 @@ async function searchPrecedents(query, topK = 5) {
   return payload;
 }
 
+/**
+ * Poll the real-time pipeline status for an in-progress bill upload.
+ * Returns { stage: number | "done" | "error", error: string | null }
+ */
+async function getBillStatus(billId) {
+  const response = await fetch(`${baseURL}/bills/${billId}/status`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch bill status.');
+  }
+  return response.json();
+}
+
+/**
+ * Generate a Gemini-powered dispute letter that incorporates rules engine findings.
+ * @param {{ billId: string, selectedItemIds: string[], patientDetails?: object, recipient?: string }} params
+ * @returns {{ letterText: string, subject: string, recipient: string }}
+ */
+async function generateDisputeLetter({ billId, selectedItemIds, patientDetails, recipient }) {
+  let response;
+  try {
+    response = await fetch(`${baseURL}/api/dispute/generate-letter`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bill_id: billId,
+        selected_item_ids: selectedItemIds,
+        patient_details: patientDetails,
+        recipient,
+      }),
+    });
+  } catch (error) {
+    throw new Error('Unable to reach backend for letter generation.');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.detail || 'Letter generation failed.';
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
 export const api = {
   baseURL,
   uploadBill,
   getBill,
+  getBillStatus,
   getHistory,
   updateStatus,
   getPrecedents,
   searchPrecedents,
-  // getAnalysisResult(billId) -> { decoded, flags, ... }
-  // buildDisputeCase(billId, selectedFlagIds) -> { caseId, letterPreview, ... }
-  // sendDisputeEmail(caseId, recipient) -> { sent: true }
+  generateDisputeLetter,
 };

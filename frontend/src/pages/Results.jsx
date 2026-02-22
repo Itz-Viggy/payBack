@@ -15,10 +15,11 @@ const severityBadge = {
 
 /* ── helpers to transform backend shapes into component shapes ──────── */
 
-function classifySeverity(markup) {
-  if (markup >= 10) return 'high'
-  if (markup >= 3) return 'medium'
-  if (markup >= 1.5) return 'low'
+function classifySeverityByMarkup(markup) {
+  // Markup-based: ≤1.0 clear, 1.0–1.5 low, 1.5–3.0 medium, >3.0 high
+  if (markup > 3) return 'high'
+  if (markup > 1.5) return 'medium'
+  if (markup > 1) return 'low'
   return 'clear'
 }
 
@@ -27,16 +28,23 @@ function buildLineItems(benchmarks, flags) {
     const item = entry.billed_item || {}
     const benches = entry.market_benchmarks || []
 
-    const billed = parseFloat(item.patient_owed || 0) // Updated to use patient_owed
+    const billed = parseFloat(item.patient_owed || item.unit_price || item.total_charge || 0)
     const bestBench = benches.length
       ? Math.min(...benches.map((b) => parseFloat(b.standard_charge || 0)).filter(Boolean))
       : 0
     const markup = bestBench > 0 ? +(billed / bestBench).toFixed(2) : 0
-    const severity = classifySeverity(markup)
+
+    // Don't flag when billed equals benchmark (within small tolerance)
+    const sameValue = bestBench > 0 && Math.abs(billed - bestBench) < 0.01
+    const severity = sameValue ? 'clear' : classifySeverityByMarkup(markup)
 
     // Find the first flag that references this line item
     const lineId = item.line_item_id
     const matchingFlag = flags.find((f) => (f.line_item_ids || []).includes(lineId))
+    // Severity is based on markup only; matchingFlag adds reason/citation but not severity
+    const finalSeverity = sameValue ? 'clear' : severity
+
+    const overcharge = Math.max(0, billed - bestBench)
 
     return {
       id: `li-${lineId ?? idx + 1}`,
@@ -46,9 +54,10 @@ function buildLineItems(benchmarks, flags) {
       billed,
       benchmark: bestBench,
       markup,
-      severity: matchingFlag ? matchingFlag.severity || severity : severity,
-      reason: matchingFlag?.message || (severity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.'),
-      citation: matchingFlag?.citation || (severity === 'clear' ? 'No variance' : ''),
+      overcharge,
+      severity: finalSeverity,
+      reason: sameValue ? 'Within expected benchmark range.' : (matchingFlag?.message || (finalSeverity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.')),
+      citation: sameValue ? '' : (matchingFlag?.citation || (finalSeverity === 'clear' ? '' : '')),
       negotiated: bestBench,   // best available proxy
       medicare: bestBench,     // best available proxy
     }
@@ -62,11 +71,15 @@ function buildReportData(bill, lineItems) {
     return sum
   }, 0)
 
+  const lineItemsSum = lineItems.reduce((s, i) => s + i.billed, 0)
+  const totalBilled = bill.total_patient_billed ?? bill.total_billed ?? lineItemsSum
+
   return {
     hospitalName: bill.facility || 'Unknown Facility',
     accountNumber: bill.account_number || '\u2014',
     dateOfService: bill.bill_date || '',
-    totalBilled: bill.total_patient_billed || lineItems.reduce((s, i) => s + i.billed, 0), // Updated to use total_patient_billed
+    totalBilled,
+    totalFromLineItems: !bill.total_patient_billed && !bill.total_billed,
     flagsFound: flagged.length,
     estimatedOvercharge: Math.round(overcharge * 100) / 100,
   }
@@ -75,8 +88,6 @@ function buildReportData(bill, lineItems) {
 
 const filterOptions = [
   { id: 'all', label: 'ALL ITEMS' },
-  { id: 'flagged', label: 'FLAGGED ONLY' },
-  { id: 'clear', label: 'CLEAN' },
 ]
 
 function buildPrecedentQuery(items) {
@@ -379,6 +390,9 @@ export default function Results() {
               <p className="mt-1 font-mono text-3xl font-semibold text-text-primary">
                 {formatCurrency(reportData.totalBilled)}
               </p>
+              <p className="mt-0.5 font-mono text-[10px] text-text-muted">
+                {reportData.totalFromLineItems ? 'Sum of line items below' : 'From extracted bill'}
+              </p>
             </div>
             <div className="sm:px-4">
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Flags found</p>
@@ -423,7 +437,7 @@ export default function Results() {
         </div>
 
         <aside className="space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">Top 5 similar cases</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">Top similar cases</p>
           {itemsForPrecedentQuery.length === 0 && (
             <p className="font-mono text-sm text-text-muted">Select items to find similar cases.</p>
           )}

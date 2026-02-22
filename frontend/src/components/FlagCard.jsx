@@ -1,4 +1,4 @@
-import { formatCurrency, formatMarkup } from '../utils/format'
+import { formatCurrency, formatOvercharge } from '../utils/format'
 
 const severityStyles = {
   high: {
@@ -40,7 +40,7 @@ export default function FlagCard({ item }) {
       <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 font-mono text-xs text-text-code">
         <span>BILLED {formatCurrency(item.billed)}</span>
         <span>BENCHMARK {formatCurrency(item.benchmark)}</span>
-        <span>MARKUP {formatMarkup(item.markup)}</span>
+        <span>OVERCHARGE ${formatOvercharge(item.billed, item.benchmark)}</span>
       </div>
     </article>
   )

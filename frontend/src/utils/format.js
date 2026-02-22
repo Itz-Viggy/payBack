@@ -16,15 +16,20 @@ export function formatCurrencyDetailed(value) {
 }
 
 export function formatDateShort(dateString) {
+  if (!dateString) return '—'
+  const d = new Date(dateString)
+  if (isNaN(d.getTime())) return '—'
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(dateString))
+  }).format(d)
 }
 
 export function formatDateTime(dateString) {
+  if (!dateString) return '—'
   const date = new Date(dateString)
+  if (isNaN(date.getTime())) return '—'
   const datePart = new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
@@ -39,6 +44,11 @@ export function formatDateTime(dateString) {
   return `${datePart} at ${timePart}`
 }
 
-export function formatMarkup(multiplier) {
-  return `${multiplier.toFixed(2)}x`
+/** Format dollar overcharge (billed − benchmark) as a number. */
+export function formatOvercharge(billed, benchmark) {
+  const overcharge = Math.max(0, billed - benchmark)
+  if (overcharge < 0.01) return '0'
+  return overcharge >= 1000
+    ? overcharge.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    : overcharge.toFixed(0)
 }
