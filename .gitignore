@@ -5,6 +5,8 @@
 !Project Structure.md
 !HACKATHON.md
 node_modules/
+backend/__pycache__/
+backend/services/__pycache__/
 /backend/venv/
 __pycache__/
 .env

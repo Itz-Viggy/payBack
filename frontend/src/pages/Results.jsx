@@ -7,6 +7,12 @@ import { api } from '../api/client'
 import { formatCurrency, formatDateShort } from '../utils/format'
 
 
+const severityBadge = {
+  high: 'border-flag-high-border bg-flag-high-dim text-flag-high',
+  medium: 'border-flag-medium-border bg-flag-medium-dim text-flag-medium',
+  low: 'border-flag-low-border bg-flag-low-dim text-flag-low',
+}
+
 /* ── helpers to transform backend shapes into component shapes ──────── */
 
 function classifySeverity(markup) {
@@ -405,15 +411,7 @@ export default function Results() {
                 {option.label}
               </button>
             ))}
-            {billId && (
-              <button
-                type="button"
-                onClick={() => navigate(`/results/${billId}/similar-cases`, { state: { report: reportData } })}
-                className="ml-auto rounded-sharp border border-amber-border px-3 py-1 font-mono text-[11px] font-semibold uppercase tracking-[0.10em] text-amber transition hover:bg-amber-dim"
-              >
-                VIEW SIMILAR CASES
-              </button>
-            )}
+
           </div>
 
           <DecodedBillTable
