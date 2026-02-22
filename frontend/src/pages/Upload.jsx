@@ -1,24 +1,32 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import BillUploader from '../components/BillUploader'
 
 export default function Upload() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState(location.state?.uploadError ?? '')
 
-  const handleFileAccepted = (file) => {
+  const handleFileAccepted = async (file) => {
+    setUploadError('')
     setIsUploading(true)
 
-    window.setTimeout(() => {
-      navigate('/processing/bill-8842-jk', {
+    try {
+      navigate('/processing/pending', {
         state: {
+          file,
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,
         },
       })
-    }, 600)
+    } catch (error) {
+      setUploadError(error.message || 'Upload failed. Please try again.')
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   return (
@@ -32,7 +40,7 @@ export default function Upload() {
         </p>
 
         <h1
-          className="mt-3 font-display text-5xl font-extrabold leading-[1.02] text-text-primary sm:text-[68px]"
+          className="mt-3 font-display text-5xl font-bold leading-[1.02] text-text-primary sm:text-[68px]"
           style={{ animation: 'fadeUp 0.5s ease-out 0.20s both' }}
         >
           Your bill,
@@ -49,6 +57,9 @@ export default function Upload() {
 
         <div className="mt-12" style={{ animation: 'fadeUp 0.4s ease-out 0.45s both' }}>
           <BillUploader onFileAccepted={handleFileAccepted} disabled={isUploading} />
+          {uploadError ? (
+            <p className="mt-3 text-center font-mono text-xs text-flag-high">{uploadError}</p>
+          ) : null}
         </div>
 
         <div className="mt-16 grid w-full max-w-[760px] grid-cols-1 gap-8 sm:grid-cols-3">

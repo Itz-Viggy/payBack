@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
+import { api } from '../api/client'
 
 const pipelineSteps = [
   'File validated',
   'PDF converted',
   'Extracting line items...',
-  'Code classification',
   'Hospital rate lookup',
   'Error detection',
   'Assembling report',
@@ -18,7 +17,9 @@ export default function Processing() {
   const { billId } = useParams()
   const location = useLocation()
   const [activeLine, setActiveLine] = useState(0)
+  const uploadStartedRef = useRef(false)
 
+  const pendingFile = location.state?.file
   const fileName = location.state?.fileName ?? 'uploaded-bill.pdf'
 
   useEffect(() => {
@@ -30,10 +31,40 @@ export default function Processing() {
     let cancelled = false
 
     const runPipeline = async () => {
+      if (billId === 'pending') {
+        if (!pendingFile) {
+          navigate('/', {
+            replace: true,
+            state: { uploadError: 'Upload session expired. Please select the file again.' },
+          })
+          return
+        }
+
+        if (uploadStartedRef.current) return
+        uploadStartedRef.current = true
+
+        setActiveLine(2)
+        try {
+          const response = await api.uploadBill(pendingFile)
+          navigate(`/processing/${response.billId}`, {
+            replace: true,
+            state: { fileName },
+          })
+        } catch (error) {
+          navigate('/', {
+            replace: true,
+            state: { uploadError: error.message || 'Upload failed. Please try again.' },
+          })
+        }
+        return
+      }
+
+      const stepDelaysMs = [1000, 2000, 5000, 700, 700, 700]
       for (let index = 0; index < pipelineSteps.length; index += 1) {
         if (cancelled) return
         setActiveLine(index)
-        await new Promise((resolve) => window.setTimeout(resolve, index < 2 ? 500 : 700))
+        const delay = stepDelaysMs[index] ?? 700
+        await new Promise((resolve) => window.setTimeout(resolve, delay))
       }
 
       if (!cancelled) {
@@ -53,7 +84,7 @@ export default function Processing() {
     return () => {
       cancelled = true
     }
-  }, [billId, fileName, navigate])
+  }, [billId, fileName, navigate, pendingFile])
 
   const subLabel = useMemo(() => {
     if (activeLine < 2) return 'Reading your bill...'
@@ -62,7 +93,7 @@ export default function Processing() {
   }, [activeLine])
 
   return (
-    <AppShell>
+    <>
       <ProgressTracker activeStep={1} subLabel={subLabel} />
 
       <section className="mt-6 grid gap-12 lg:grid-cols-[55%_45%]">
@@ -97,11 +128,13 @@ export default function Processing() {
               return (
                 <div key={line} className="flex items-center gap-3 font-mono text-[13px]">
                   {done ? (
-                    <span className="text-amber">?</span>
+                    <span className="text-amber" aria-hidden="true">{'\u2713'}</span>
                   ) : active ? (
-                    <span className="animate-pulse-dot text-amber">?</span>
+                    <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-amber border-t-transparent" />
+                    </span>
                   ) : (
-                    <span className="text-text-muted">•</span>
+                    <span className="text-text-muted" aria-hidden="true">{'\u00B7'}</span>
                   )}
 
                   <span className={done || active ? 'text-text-code' : 'text-text-muted'}>{line}</span>
@@ -111,6 +144,6 @@ export default function Processing() {
           </div>
         </div>
       </section>
-    </AppShell>
+    </>
   )
 }

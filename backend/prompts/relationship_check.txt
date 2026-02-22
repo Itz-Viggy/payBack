@@ -9,6 +9,8 @@ You are a medical billing compliance expert. Review the following list of billin
 - Facility vs. professional fee confusion: duplicate billing of the same service under both a facility fee and a professional fee
 - Out-of-network provider charges not disclosed to the patient
 
+Consider state-specific provider and facility billing rules. State for this bill: {{state}}.
+
 For each potential violation found, return:
 - line_item_id: the ID of the affected line item
 - issue_type: one of ["stark_law", "anti_kickback", "duplicate_facility_professional", "undisclosed_oon"]
@@ -21,6 +23,9 @@ Return ONLY valid JSON:
 }
 
 If no issues are found, return: { "flags": [] }
+
+Similar historical cases (use for context on how similar billing issues were identified and approached in the past):
+{{similar_cases_context}}
 
 Line items:
 {{line_items_json}}

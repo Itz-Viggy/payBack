@@ -1,0 +1,24 @@
+20 new precedents (diverse settings, issue types, and services):
+#	Setting / scenario	Issue type	Example codes
+21	Urgent care	upcoding	99215, 99214
+22	Sleep study	duplicate_billing	95810, 95811
+23	Colonoscopy + biopsy	unbundling	45378, 45380, 88305
+24	Telehealth	upcoding (POS)	99213, 99214
+25	Drug quantity (inpatient)	upcoding	J0270, J1885
+26	Office visit + injection	unbundling (mod 25)	99213, 96372
+27	Critical care	upcoding (time)	99291, 99292
+28	DME / supplies	facility_fee	A7037, A9270
+29	Cardiac stress test	facility_fee	93015, 93016
+30	Spinal injection + fluoro	unbundling	62323, 77003
+31	Well-child + vaccines	duplicate_billing	99394, 90460, 90461
+32	Dialysis	duplicate_billing	90960, 90961
+33	E/M + procedure (mod 25)	unbundling	99214, 17000
+34	Surgical tray	unbundling	A4550, 11042
+35	Ultrasound	duplicate_billing	76700, 76705
+36	New vs established patient	upcoding	99203, 99213
+37	Respiratory therapy	duplicate_billing	94640, 94644
+38	Blood transfusion	facility_fee	36430, P9010
+39	Wound debridement	unbundling	11042, 97602
+40	Consultation	upcoding	99244, 99214
+41	ASC facility fee	facility_fee	29881, 52000
+42	Overlapping lab panels	duplicate_billing	80053, 80061, 84443

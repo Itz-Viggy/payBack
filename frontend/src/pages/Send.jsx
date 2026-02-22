@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
 import EmailSender from '../components/EmailSender'
 import ConfirmationScreen from '../components/ConfirmationScreen'
@@ -58,7 +57,7 @@ export default function Send() {
   }
 
   return (
-    <AppShell>
+    <>
       <ProgressTracker activeStep={4} subLabel={sendReceipt ? 'Dispute delivered.' : 'Ready for final send.'} />
 
       {!sendReceipt ? (
@@ -77,6 +76,6 @@ export default function Send() {
           onDecodeAnother={() => navigate('/')}
         />
       )}
-    </AppShell>
+    </>
   )
 }

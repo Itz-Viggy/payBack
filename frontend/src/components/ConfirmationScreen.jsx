@@ -16,7 +16,7 @@ export default function ConfirmationScreen({ receipt, onTrack, onDecodeAnother }
         />
       </svg>
 
-      <h1 className="mt-6 font-display text-4xl font-extrabold sm:text-[52px]">Letter sent.</h1>
+      <h1 className="mt-6 font-display text-4xl font-bold sm:text-[52px]">Letter sent.</h1>
 
       <p className="mt-4 font-mono text-[13px] leading-8 text-text-secondary">
         Sent from {receipt.fromEmail}
