@@ -89,6 +89,16 @@ async function getBill(billId) {
   return response.json();
 }
 
+/** Re-run the rules engine on the stored bill (second pass). Returns updated bill. */
+async function rerunRules(billId) {
+  const response = await fetch(`${baseURL}/bills/${billId}/rerun-rules`, { method: 'POST' });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.detail || 'Failed to re-check rules.');
+  }
+  return response.json();
+}
+
 async function getPrecedents(billId, topK = 5) {
   let response;
   try {
@@ -210,6 +220,7 @@ export const api = {
   uploadBill,
   getBill,
   getBillStatus,
+  rerunRules,
   getHistory,
   getDemoHistory,
   getAnalysis,
