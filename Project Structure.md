@@ -40,7 +40,6 @@ PayBack/
 │   │   ├── case_builder.py              # Build dispute case from selected flags and evidence
 │   │   ├── mongo_service.py             # MongoDB: bills, cases, dispute history
 │   │   ├── pdf_converter.py             # PDF/image → text or images for Gemini input
-│   │   ├── gmail_mcp.py                 # Gmail/MCP integration for sending dispute emails
 │   │   └── email_formatter.py           # Format dispute letter body from case + prompt output
 │   ├── prompts/
 │   │   ├── extraction.txt               # Extract structured line items from bill text

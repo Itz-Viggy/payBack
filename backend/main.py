@@ -1,6 +1,6 @@
 # main.py — FastAPI app entry point.
 # Currently: CORS for frontend (localhost:5173), GET /health for setup verification.
-# TODO: Add routes and wire up services (upload, analyze, results, dispute case, send email).
+# TODO: Add routes and wire up services (upload, analyze, results, dispute case).
 
 import json
 import os
@@ -267,6 +267,53 @@ def get_bill_precedents(bill_id: str, top_k: int = 5):
         ) from exc
 
 
+class GenerateLetterRequest(BaseModel):
+    bill_id: str
+    selected_item_ids: list[str | int]
+    patient_details: dict | None = None
+    recipient: str | None = None
+
+
+@app.post("/api/dispute/generate-letter")
+def generate_letter(req: GenerateLetterRequest):
+    """Generate a Gemini-powered dispute letter that incorporates rules engine findings."""
+    if req.bill_id not in BILLS_STORE:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    bill = BILLS_STORE[req.bill_id]
+    flags = bill.get("flags") or []
+    benchmarks = bill.get("benchmarks") or []
+
+    from services.case_builder import build_case_for_gemini
+    from services.gemini_service import ExtractionError as LetterError, generate_dispute_letter
+
+    case_data = build_case_for_gemini(
+        bill_data=bill,
+        selected_item_ids=req.selected_item_ids,
+        benchmarks=benchmarks,
+        flags=flags,
+    )
+
+    patient = req.patient_details or {}
+    if patient.get("fullName"):
+        case_data["patient_name"] = patient["fullName"]
+
+    account = bill.get("account_number") or ""
+    subject = f"Formal Billing Dispute - Acct #{account}" if account else "Formal Billing Dispute"
+    recipient = req.recipient or patient.get("billingEmail") or ""
+
+    try:
+        letter_text = generate_dispute_letter(case_data)
+    except LetterError as exc:
+        raise HTTPException(status_code=500, detail=f"Letter generation failed: {exc}") from exc
+
+    return {
+        "letterText": letter_text,
+        "subject": subject,
+        "recipient": recipient,
+    }
+
+
 class PrecedentSearchRequest(BaseModel):
     query: str
     top_k: int = 5
@@ -289,8 +336,3 @@ def search_precedents_endpoint(req: PrecedentSearchRequest):
             status_code=503,
             detail=f"Precedent search unavailable. Ensure VectorAI DB is running at localhost:50051 and precedents are seeded. {exc!s}",
         ) from exc
-
-
-# TODO: Add routes for upload, analyze, get results, build dispute case, send email.
-# Wire up: gemini_service, oria_db, hospital_matcher, rules_engine, case_builder,
-#          mongo_service, pdf_converter, gmail_mcp, email_formatter.

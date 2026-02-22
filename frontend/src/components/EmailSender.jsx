@@ -1,73 +1,81 @@
-import { formatCurrency } from '../utils/format'
-
 export default function EmailSender({
   draft,
-  gmailConnection,
-  onConnect,
-  onSend,
-  isSending,
-  onCopy,
+  onToChange,
+  onSubjectChange,
+  onOpenDraft,
+  onCopyRecipient,
+  onCopySubject,
+  onCopyBody,
+  bodyTooLong,
 }) {
-  const disputedTotal = draft.selectedItems.reduce((sum, item) => sum + item.billed, 0)
-
   return (
     <div className="mx-auto w-full max-w-[540px] py-12">
       <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">READY TO SEND</p>
       <h1 className="mt-3 font-display text-4xl font-bold leading-[1.05] text-text-primary sm:text-[52px]">
-        Send from your
+        Open in your
         <br />
-        own Gmail.
+        email client.
       </h1>
       <p className="mt-4 max-w-[500px] font-display text-[15px] leading-7 text-text-secondary">
-        The letter arrives from your email address, creating a legal paper trail.
+        Use your default mail app to send the dispute from your own address.
       </p>
 
-      <section className="surface-panel mt-10 p-6">
-        {!gmailConnection.connected ? (
-          <>
-            <div className="flex items-center gap-4">
-              <div className="grid h-10 w-10 place-items-center rounded-sharp border border-border-subtle bg-bg-elevated font-mono text-sm text-text-secondary">
-                G
-              </div>
-              <button type="button" className="btn-primary" onClick={onConnect}>
-                CONNECT GMAIL
-              </button>
-            </div>
-            <p className="mt-3 font-mono text-[11px] text-text-muted">
-              Send-only access. We never read your inbox.
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="font-mono text-xs font-semibold text-amber">? CONNECTED</p>
-            <p className="mt-2 font-mono text-sm text-text-secondary">{gmailConnection.email}</p>
-          </>
-        )}
+      <section className="surface-panel mt-10 space-y-4 p-6">
+        <div>
+          <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">TO</label>
+          <div className="mt-1 flex gap-2">
+            <input
+              type="email"
+              value={draft.recipient}
+              onChange={(e) => onToChange?.(e.target.value)}
+              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-amber"
+              placeholder="billing@hospital.org"
+            />
+            <button type="button" className="btn-ghost shrink-0" onClick={onCopyRecipient}>
+              COPY
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">SUBJECT</label>
+          <div className="mt-1 flex gap-2">
+            <input
+              type="text"
+              value={draft.subject}
+              onChange={(e) => onSubjectChange?.(e.target.value)}
+              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-amber"
+              placeholder="Dispute of Medical Bill – Request for Itemized Statement"
+            />
+            <button type="button" className="btn-ghost shrink-0" onClick={onCopySubject}>
+              COPY
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">BODY (read-only)</label>
+          <div className="mt-1 max-h-[200px] overflow-y-auto rounded-sharp border border-border-subtle bg-bg-elevated px-3 py-2">
+            <pre className="whitespace-pre-wrap font-mono text-[12px] text-text-primary">{draft.letterText || '—'}</pre>
+          </div>
+          <button type="button" className="btn-ghost mt-2" onClick={onCopyBody}>
+            COPY BODY
+          </button>
+        </div>
       </section>
 
-      <section className="mt-6 rounded-sharp border border-border-subtle bg-bg-surface px-6 py-5">
-        <p className="font-mono text-xs leading-8 text-text-secondary">
-          TO: {draft.recipient}
-          <br />
-          SUBJECT: {draft.subject}
-          <br />
-          DISPUTED: {formatCurrency(disputedTotal)} across {draft.selectedItems.length} items
-        </p>
-      </section>
-
-      <button
-        type="button"
-        className="btn-primary mt-6 w-full"
-        onClick={onSend}
-        disabled={!gmailConnection.connected || isSending}
-      >
-        {isSending ? 'SENDING...' : 'SEND'}
+      <button type="button" className="btn-primary mt-6 w-full" onClick={onOpenDraft}>
+        OPEN EMAIL DRAFT
       </button>
 
+      {bodyTooLong && (
+        <p className="mt-2 font-mono text-[11px] text-amber">
+          Body is long; we&apos;ll open a modal to copy and open a draft with instructions.
+        </p>
+      )}
+
       <div className="mt-3 text-center">
-        <button type="button" className="btn-ghost" onClick={onCopy}>
-          COPY TO CLIPBOARD INSTEAD
-        </button>
+        <p className="font-mono text-[10px] text-text-muted">Or copy recipient, subject, and body individually above.</p>
       </div>
     </div>
   )

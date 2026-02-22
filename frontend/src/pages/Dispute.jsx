@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import ProgressTracker from '../components/ProgressTracker'
 import DisputePanel from '../components/DisputePanel'
+import { api } from '../api/client'
 import { formatCurrency, formatDateShort } from '../utils/format'
 
 const fallbackReport = {
@@ -37,6 +38,7 @@ const fallbackItems = [
 export default function Dispute() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { caseId: billId } = useParams()
   const report = location.state?.report ?? fallbackReport
   const items = location.state?.selectedItems?.length ? location.state.selectedItems : fallbackItems
 
@@ -50,6 +52,9 @@ export default function Dispute() {
     location.state?.selectedItemIds?.length ? location.state.selectedItemIds : items.map((item) => item.id)
   )
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generateError, setGenerateError] = useState(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [letterText, setLetterText] = useState('')
 
   const selectedItems = useMemo(
     () => items.filter((item) => selectedItemIds.includes(item.id)),
@@ -67,8 +72,66 @@ export default function Dispute() {
     )
   }
 
-  const handleGenerate = () => {
+  const buildLetterText = () => {
+    const itemLines = selectedItems
+      .map((item) => {
+        const line = `${item.cptCode}  ${item.description}  ${formatCurrency(item.billed)}`
+        return item.reason && item.reason !== 'Within expected benchmark range.'
+          ? `${line}\n    Issue: ${item.reason}`
+          : line
+      })
+      .join('\n')
+    return [
+      `${patientDetails.fullName || '[PATIENT NAME]'}`,
+      `${patientDetails.mailingAddress || '[MAILING ADDRESS]'}`,
+      `${patientDetails.state || '[STATE]'}`,
+      '',
+      formatDateShort(new Date().toISOString()),
+      '',
+      `To: ${patientDetails.billingEmail || '[HOSPITAL BILLING EMAIL]'}`,
+      '',
+      `Re: Formal Billing Dispute - Account #${report.accountNumber}`,
+      `Date of Service: ${formatDateShort(report.dateOfService)}`,
+      '',
+      'I am submitting a formal dispute for the following billed services. The identified charges appear materially above benchmark and require itemized justification or adjustment.',
+      '',
+      itemLines,
+      '',
+      'Please investigate these charges and issue a corrected statement within a reasonable timeframe. Written response is requested.',
+      '',
+      'Sincerely,',
+      patientDetails.fullName || '[PATIENT NAME]',
+    ].join('\n')
+  }
+
+  const handleGenerate = async () => {
     setIsGenerating(true)
+    setGenerateError(null)
+
+    if (billId) {
+      try {
+        const result = await api.generateDisputeLetter({
+          billId,
+          selectedItemIds,
+          patientDetails,
+          recipient: patientDetails.billingEmail || 'billing@massgeneralhospital.org',
+        })
+        const draft = {
+          recipient: result.recipient || patientDetails.billingEmail || 'billing@massgeneralhospital.org',
+          subject: result.subject || `Formal Billing Dispute - Acct #${report.accountNumber}`,
+          selectedItems,
+          patientDetails,
+          report,
+          lawsCited: citedLaws,
+          letterText: result.letterText,
+        }
+        navigate(`/send/${billId}`, { state: { draft } })
+        return
+      } catch (err) {
+        console.warn('[dispute] Gemini letter generation failed, falling back to static template:', err.message)
+        setGenerateError(err.message)
+      }
+    }
 
     const draft = {
       recipient: patientDetails.billingEmail || 'billing@massgeneralhospital.org',
@@ -77,23 +140,29 @@ export default function Dispute() {
       patientDetails,
       report,
       lawsCited: citedLaws,
+      letterText,
     }
-
-    window.setTimeout(() => {
-      navigate('/send/case-8842-jk', { state: { draft } })
-    }, 500)
+    navigate(`/send/${billId || 'case'}`, { state: { draft } })
+    setIsGenerating(false)
   }
 
-  const patientName = patientDetails.fullName || '[PATIENT NAME]'
-  const patientAddress = patientDetails.mailingAddress || '[MAILING ADDRESS]'
-  const patientState = patientDetails.state || '[STATE]'
-
-  const placeholderClass = (value) =>
-    value.startsWith('[') ? 'text-amber italic' : 'text-text-primary'
+  useEffect(() => {
+    if (!isEditing) {
+      setLetterText(buildLetterText())
+    }
+  }, [patientDetails, selectedItems, report, isEditing])
 
   return (
     <section className="pb-16">
       <ProgressTracker activeStep={3} subLabel="Build your dispute packet and verify letter language." />
+
+      {generateError && (
+        <div className="mx-auto mt-4 max-w-[540px] rounded-sharp border border-flag-medium-border bg-flag-medium-dim px-5 py-3">
+          <p className="font-mono text-sm text-flag-medium">
+            AI letter generation unavailable — using template. ({generateError})
+          </p>
+        </div>
+      )}
 
       <section className="mt-6 grid gap-10 lg:grid-cols-[52%_48%]">
         <div>
@@ -111,55 +180,34 @@ export default function Dispute() {
         <aside className="surface-panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-border-subtle bg-bg-elevated px-5 py-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">DISPUTE LETTER DRAFT</p>
-            <button type="button" className="btn-ghost text-[11px]">
-              EDIT
+            <button
+              type="button"
+              className="btn-ghost text-[11px]"
+              onClick={() => {
+                if (isEditing) {
+                  setIsEditing(false)
+                } else {
+                  setLetterText(buildLetterText())
+                  setIsEditing(true)
+                }
+              }}
+            >
+              {isEditing ? 'PREVIEW' : 'EDIT'}
             </button>
           </div>
 
-          <div className="space-y-6 px-7 py-9 font-mono text-[13px] font-light leading-[1.9] text-text-primary">
-            <p>
-              <span className={placeholderClass(patientName)}>{patientName}</span>
-              <br />
-              <span className={placeholderClass(patientAddress)}>{patientAddress}</span>
-              <br />
-              <span className={placeholderClass(patientState)}>{patientState}</span>
-            </p>
-
-            <p>{formatDateShort(new Date().toISOString())}</p>
-
-            <p>To: {patientDetails.billingEmail || '[HOSPITAL BILLING EMAIL]'}</p>
-
-            <p>
-              Re: Formal Billing Dispute - Account #{report.accountNumber}
-              <br />
-              Date of Service: {formatDateShort(report.dateOfService)}
-            </p>
-
-            <p>
-              I am submitting a formal dispute for the following billed services. The identified charges appear
-              materially above benchmark and require itemized justification or adjustment.
-            </p>
-
-            <div className="space-y-2">
-              {selectedItems.map((item) => (
-                <p key={item.id}>
-                  <span className="rounded-sharp bg-amber-dim px-1 text-amber">{item.cptCode}</span> {item.description}{' '}
-                  <span className="text-flag-high">{formatCurrency(item.billed)}</span>
-                </p>
-              ))}
+          {isEditing ? (
+            <textarea
+              value={letterText}
+              onChange={(e) => setLetterText(e.target.value)}
+              className="w-full flex-1 resize-none bg-transparent px-7 py-9 font-mono text-[13px] font-light leading-[1.9] text-text-primary outline-none"
+              style={{ minHeight: '500px' }}
+            />
+          ) : (
+            <div className="whitespace-pre-wrap px-7 py-9 font-mono text-[13px] font-light leading-[1.9] text-text-primary">
+              {letterText}
             </div>
-
-            <p>
-              Please investigate these charges and issue a corrected statement within a reasonable timeframe.
-              Written response is requested.
-            </p>
-
-            <p>
-              Sincerely,
-              <br />
-              <span className={placeholderClass(patientName)}>{patientName}</span>
-            </p>
-          </div>
+          )}
 
           <div className="border-t border-border-subtle px-5 py-3">
             <p className="font-mono text-[10px] text-text-muted">

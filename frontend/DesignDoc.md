@@ -479,27 +479,18 @@ RIGHT — LIVE LETTER PREVIEW:
 Centered content, max-width: 540px:
 
   JBMono 10px / uppercase / muted: "READY TO SEND"
-  Syne 800 / 52px: "Send from your
-                    own Gmail."
+  Syne 800 / 52px: "Open in your
+                    email client."
   Syne 400 / 15px / text-secondary:
-    "The letter arrives from your email address, creating a legal paper trail."
+    "Use your default mail app to send the dispute from your own address."
 
-  GMAIL CONNECT BLOCK (border: border-default, border-radius: 2px, padding: 24px, mt: 40px):
-    Not connected:
-      [G icon] [PRIMARY BTN] "CONNECT GMAIL"
-      JBMono 11px / muted: "Send-only access. We never read your inbox."
-    Connected:
-      JBMono 600 / amber: "✓ CONNECTED"
-      JBMono 12px / text-secondary: "john.doe@gmail.com"
+  EMAIL DRAFT BLOCK (border: border-default, border-radius: 2px, padding: 24px, mt: 40px):
+    TO (editable input + COPY btn)
+    SUBJECT (editable input + COPY btn)
+    BODY (read-only preview + COPY BODY btn)
 
-  SEND SUMMARY (bg-surface, border: border-subtle, border-radius: 2px, padding: 20px 24px, mt: 24px):
-    JBMono 12px / text-secondary, line-height: 2:
-      TO:       billing@massgeneralhospital.org
-      SUBJECT:  Formal Billing Dispute — Acct #8842-JK
-      DISPUTED: $2,800 across 3 items
-
-  [PRIMARY BTN full-width, mt: 24px] "SEND"
-  [GHOST BTN, mt: 12px] "Copy to clipboard instead"
+  [PRIMARY BTN full-width, mt: 24px] "OPEN EMAIL DRAFT"
+  JBMono 10px / muted (mt: 8px): "Or copy recipient, subject, body individually above."
 ```
 
 **POST-SEND:**
@@ -507,9 +498,9 @@ Centered content, max-width: 540px:
   [SVG checkmark — amber stroke, stroke-dashoffset draw animation, 64px]
   Syne 800 / 52px (mt: 24px): "Letter sent."
   JBMono 400 / 13px / text-secondary (mt: 16px, line-height: 2):
-    "Sent from john.doe@gmail.com"
+    "Sent from your email address"
     "Feb 19, 2026 at 11:42 AM"
-    "A copy is in your Gmail Sent folder."
+    "A copy is in your email Sent folder."
 
   [1px amber-border hairline, my: 32px]
 

@@ -75,8 +75,6 @@ function buildReportData(bill, lineItems) {
 
 const filterOptions = [
   { id: 'all', label: 'ALL ITEMS' },
-  { id: 'flagged', label: 'FLAGGED ONLY' },
-  { id: 'clear', label: 'CLEAN' },
 ]
 
 function buildPrecedentQuery(items) {

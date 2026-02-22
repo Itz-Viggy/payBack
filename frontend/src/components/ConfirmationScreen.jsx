@@ -23,7 +23,7 @@ export default function ConfirmationScreen({ receipt, onTrack, onDecodeAnother }
         <br />
         {formatDateTime(receipt.sentAt)}
         <br />
-        A copy is in your Gmail Sent folder.
+        A copy is in your email Sent folder.
       </p>
 
       <div className="my-8 h-px w-full bg-amber-border" />

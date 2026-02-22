@@ -16,15 +16,20 @@ export function formatCurrencyDetailed(value) {
 }
 
 export function formatDateShort(dateString) {
+  if (!dateString) return '—'
+  const d = new Date(dateString)
+  if (isNaN(d.getTime())) return '—'
   return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  }).format(new Date(dateString))
+  }).format(d)
 }
 
 export function formatDateTime(dateString) {
+  if (!dateString) return '—'
   const date = new Date(dateString)
+  if (isNaN(date.getTime())) return '—'
   const datePart = new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',

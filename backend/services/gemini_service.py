@@ -257,6 +257,7 @@ def generate_dispute_letter(case_data: dict) -> str:
         .replace("{{total_billed}}", str(case_data.get("total_patient_billed") or case_data.get("total_billed") or ""))
         .replace("{{disputed_charges_json}}", str(case_data.get("disputed_charges_json") or "[]"))
         .replace("{{pricing_benchmarks_json}}", str(case_data.get("pricing_benchmarks_json") or "[]"))
+        .replace("{{rules_findings_json}}", str(case_data.get("rules_findings_json") or "[]"))
     )
     model = _configure_model()
     try:

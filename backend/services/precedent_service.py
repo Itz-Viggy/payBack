@@ -63,12 +63,18 @@ def search_precedents(query_text: str, top_k: int = DEFAULT_TOP_K) -> list[dict[
     except Exception as e:
         raise PrecedentServiceError(f"Vector DB unreachable or search failed: {e}") from e
 
+    seen_summaries: set[str] = set()
     out = []
     for r in results:
         payload = dict(r.payload) if getattr(r, "payload", None) else {}
+        dedup_key = (payload.get("summary") or "").strip()
+        if dedup_key and dedup_key in seen_summaries:
+            continue
+        if dedup_key:
+            seen_summaries.add(dedup_key)
         out.append({
             "id": getattr(r, "id", None),
             "score": float(getattr(r, "score", 0.0)),
             "payload": payload,
         })
-    return out
+    return out[:top_k]

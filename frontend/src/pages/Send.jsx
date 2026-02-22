@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
+import { Toaster, toast } from 'react-hot-toast'
 import ProgressTracker from '../components/ProgressTracker'
 import EmailSender from '../components/EmailSender'
-import ConfirmationScreen from '../components/ConfirmationScreen'
 
 const fallbackDraft = {
   recipient: 'billing@massgeneralhospital.org',
@@ -15,66 +15,119 @@ const fallbackDraft = {
   patientDetails: {
     fullName: 'Patient Name',
   },
+  letterText: '',
 }
 
+const MAILTO_BODY_LIMIT = 2000
+
 export default function Send() {
-  const navigate = useNavigate()
   const location = useLocation()
   const draft = location.state?.draft ?? fallbackDraft
 
-  const [gmailConnection, setGmailConnection] = useState({
-    connected: false,
-    email: '',
-  })
-  const [isSending, setIsSending] = useState(false)
-  const [sendReceipt, setSendReceipt] = useState(null)
+  const body = draft.letterText || `Subject: ${draft.subject}\nTo: ${draft.recipient}\n\n[Paste your letter here]`
+  const bodyTooLong = body.length > MAILTO_BODY_LIMIT
 
-  const handleConnect = () => {
-    setGmailConnection({ connected: true, email: 'john.doe@gmail.com' })
-  }
+  const [localTo, setLocalTo] = useState(draft.recipient || '')
+  const [localSubject, setLocalSubject] = useState(draft.subject || 'Dispute of Medical Bill – Request for Itemized Statement')
+  const [modalOpen, setModalOpen] = useState(false)
 
-  const handleSend = () => {
-    if (!gmailConnection.connected || isSending) return
-
-    setIsSending(true)
-    window.setTimeout(() => {
-      setSendReceipt({
-        sent: true,
-        sentAt: new Date().toISOString(),
-        fromEmail: gmailConnection.email,
-      })
-      setIsSending(false)
-    }, 900)
-  }
-
-  const handleCopy = async () => {
-    const body = `Subject: ${draft.subject}\nTo: ${draft.recipient}`
+  const copyToClipboard = async (text, label) => {
     try {
-      await navigator.clipboard.writeText(body)
-    } catch {
-      // Clipboard can be blocked in some browsers or localhost contexts.
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+        toast.success(`${label} copied to clipboard`)
+        return true
+      }
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.left = '-9999px'
+      document.body.appendChild(ta)
+      ta.select()
+      try {
+        document.execCommand('copy')
+        toast.success(`${label} copied to clipboard`)
+        return true
+      } finally {
+        document.body.removeChild(ta)
+      }
+    } catch (err) {
+      toast.error(`Could not copy ${label}. Try selecting and copying manually.`)
+      return false
     }
+  }
+
+  const handleCopyRecipient = () => copyToClipboard(localTo, 'Recipient email')
+  const handleCopySubject = () => copyToClipboard(localSubject, 'Subject')
+  const handleCopyBody = () => copyToClipboard(body, 'Body')
+
+  const handleOpenDraft = () => {
+    if (bodyTooLong) {
+      setModalOpen(true)
+      return
+    }
+    const encodedSubject = encodeURIComponent(localSubject)
+    const encodedBody = encodeURIComponent(body)
+    const mailto = `mailto:${encodeURIComponent(localTo)}?subject=${encodedSubject}&body=${encodedBody}`
+    window.location.href = mailto
+    toast.success('Opened email draft in your mail client')
+  }
+
+  const handleOpenDraftFromModal = () => {
+    const shortBody = 'Please paste your dispute letter below (copied to clipboard).\n\n'
+    const encodedSubject = encodeURIComponent(localSubject)
+    const encodedBody = encodeURIComponent(shortBody)
+    const mailto = `mailto:${encodeURIComponent(localTo)}?subject=${encodedSubject}&body=${encodedBody}`
+    window.location.href = mailto
+    copyToClipboard(body, 'Letter body')
+    setModalOpen(false)
+    toast.success('Opened draft. Paste the letter body from your clipboard.')
   }
 
   return (
     <>
-      <ProgressTracker activeStep={4} subLabel={sendReceipt ? 'Dispute delivered.' : 'Ready for final send.'} />
+      <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
+      <ProgressTracker activeStep={4} subLabel="Ready to open draft or copy." />
 
-      {!sendReceipt ? (
-        <EmailSender
-          draft={draft}
-          gmailConnection={gmailConnection}
-          onConnect={handleConnect}
-          onSend={handleSend}
-          isSending={isSending}
-          onCopy={handleCopy}
-        />
-      ) : (
-        <ConfirmationScreen
-          receipt={sendReceipt}
-          onTrack={() => navigate('/results/bill-8842-jk')}
-          onDecodeAnother={() => navigate('/')}
-        />
+      <EmailSender
+        draft={{
+          ...draft,
+          recipient: localTo,
+          subject: localSubject,
+          letterText: body,
+        }}
+        onToChange={setLocalTo}
+        onSubjectChange={setLocalSubject}
+        onOpenDraft={handleOpenDraft}
+        onCopyRecipient={handleCopyRecipient}
+        onCopySubject={handleCopySubject}
+        onCopyBody={handleCopyBody}
+        bodyTooLong={bodyTooLong}
+      />
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <div className="surface-panel max-h-[85vh] w-full max-w-[600px] overflow-hidden rounded-sharp border border-border-subtle p-6">
+            <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">LETTER TOO LONG FOR MAILTO LINK</p>
+            <p className="mt-2 font-mono text-sm text-text-secondary">
+              Your letter exceeds URL length limits. Copy the body below, then we&apos;ll open your mail client with subject and a short instruction to paste.
+            </p>
+            <div className="mt-4 max-h-[320px] overflow-y-auto rounded-sharp border border-border-subtle bg-bg-elevated px-4 py-4">
+              <pre className="whitespace-pre-wrap font-mono text-[13px] text-text-primary">{body}</pre>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button type="button" className="btn-primary" onClick={() => { handleOpenDraftFromModal(); }}>
+                COPY BODY & OPEN DRAFT
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => copyToClipboard(body, 'Letter body')}>
+                COPY BODY ONLY
+              </button>
+              <button type="button" className="btn-ghost" onClick={() => setModalOpen(false)}>
+                CANCEL
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )

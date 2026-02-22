@@ -126,19 +126,9 @@ def build_draft(
     }
 
 
-def build_case_for_gemini(
-    bill_data: dict,
-    selected_item_ids: list[int | str],
-    benchmarks: list | dict | None = None,
-) -> dict:
-    """
-    Build case data for the dispute_letter Gemini prompt (patient_name, account_number,
-    facility, date_of_service, total_patient_billed, disputed_charges_json, pricing_benchmarks_json).
-    """
-    draft = build_draft(bill_data, selected_item_ids, benchmarks=benchmarks)
-    report = draft["report"]
-    line_items = bill_data.get("line_items") or []
-    selected_ids = set()
+def _resolve_selected_ids(selected_item_ids: list[int | str]) -> set[int]:
+    """Normalize a mix of int / 'li-N' / str-int IDs into a set of ints."""
+    selected_ids: set[int] = set()
     for sid in selected_item_ids:
         if isinstance(sid, int):
             selected_ids.add(sid)
@@ -152,6 +142,43 @@ def build_case_for_gemini(
                 selected_ids.add(int(sid))
             except (TypeError, ValueError):
                 pass
+    return selected_ids
+
+
+def _filter_flags_for_items(flags: list[dict], selected_ids: set[int]) -> list[dict]:
+    """Return only flags whose line_item_ids overlap with selected_ids, trimmed to relevant keys."""
+    filtered = []
+    for flag in flags:
+        flag_ids = set(flag.get("line_item_ids") or [])
+        if not flag_ids.intersection(selected_ids):
+            continue
+        filtered.append({
+            "rule_name": flag.get("rule_name"),
+            "line_item_ids": sorted(flag_ids.intersection(selected_ids)),
+            "severity": flag.get("severity"),
+            "message": flag.get("message"),
+            "citation": flag.get("citation"),
+        })
+    return filtered
+
+
+def build_case_for_gemini(
+    bill_data: dict,
+    selected_item_ids: list[int | str],
+    benchmarks: list | dict | None = None,
+    flags: list[dict] | None = None,
+) -> dict:
+    """
+    Build case data for the dispute_letter Gemini prompt (patient_name, account_number,
+    facility, date_of_service, total_patient_billed, disputed_charges_json,
+    pricing_benchmarks_json, rules_findings_json).
+
+    flags: Rules engine flags from run_holistic_review; filtered to selected items automatically.
+    """
+    draft = build_draft(bill_data, selected_item_ids, benchmarks=benchmarks)
+    report = draft["report"]
+    line_items = bill_data.get("line_items") or []
+    selected_ids = _resolve_selected_ids(selected_item_ids)
 
     disputed_charges = []
     date_of_service = report.get("dateOfService") or bill_data.get("bill_date")
@@ -173,6 +200,8 @@ def build_case_for_gemini(
     if benchmarks is not None:
         benchmarks_json = json.dumps(benchmarks) if not isinstance(benchmarks, str) else benchmarks
 
+    relevant_flags = _filter_flags_for_items(flags or [], selected_ids)
+
     return {
         "patient_name": bill_data.get("patient_name") or "[PATIENT NAME]",
         "account_number": bill_data.get("account_number") or "[ACCOUNT]",
@@ -181,6 +210,7 @@ def build_case_for_gemini(
         "total_billed": bill_data.get("total_patient_billed") or bill_data.get("total_billed"),
         "disputed_charges_json": json.dumps(disputed_charges, indent=2),
         "pricing_benchmarks_json": benchmarks_json,
+        "rules_findings_json": json.dumps(relevant_flags, indent=2),
     }
 
 
