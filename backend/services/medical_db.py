@@ -140,7 +140,7 @@ def process_entire_bill(bill_json):
         "metadata": {
             "patient": bill_json.get("patient_name"),
             "account": bill_json.get("account_number"),
-            "total_billed": bill_json.get("total_billed")
+            "total_billed": bill_json.get("total_patient_billed") or bill_json.get("total_billed")
         },
         "audited_items": audited_items
     }

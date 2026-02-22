@@ -8,14 +8,23 @@ from __future__ import annotations
 import json
 
 
+def _line_item_amount(item: dict) -> float:
+    """Preferred amount for comparison: patient_owed (P. Owed), then total_charge, then unit_price * quantity."""
+    p = item.get("patient_owed")
+    if p is not None:
+        return float(p)
+    total = item.get("total_charge")
+    if total is not None:
+        return float(total)
+    qty = item.get("quantity", 1)
+    up = item.get("unit_price", 0)
+    return float(up) * float(qty) if up is not None else 0.0
+
+
 def _normalize_line_item(item: dict, index: int) -> dict:
     """Map extracted line item to draft selectedItem shape (id, cptCode, description, billed, citation)."""
     lid = item.get("line_item_id") or index + 1
-    total = item.get("total_charge")
-    if total is None:
-        qty = item.get("quantity", 1)
-        up = item.get("unit_price", 0)
-        total = float(up) * float(qty) if up is not None else 0
+    total = _line_item_amount(item)
     return {
         "id": f"li-{lid}",
         "line_item_id": lid,
@@ -27,13 +36,13 @@ def _normalize_line_item(item: dict, index: int) -> dict:
 
 
 def _bill_report(bill_data: dict, date_of_service: str | None) -> dict:
-    """Build report dict for draft from extracted bill."""
+    """Build report dict for draft from extracted bill. Uses total_patient_billed (patient balance due) when present."""
     return {
         "accountNumber": bill_data.get("account_number") or "",
         "dateOfService": date_of_service or bill_data.get("bill_date") or "",
         "facility": bill_data.get("facility") or "",
         "hospitalName": bill_data.get("facility") or "",
-        "totalBilled": bill_data.get("total_billed"),
+        "totalBilled": bill_data.get("total_patient_billed") or bill_data.get("total_billed"),
     }
 
 
@@ -50,7 +59,7 @@ def build_draft(
 
     Args:
         bill_data: Extracted bill from gemini_service.extract_bill (patient_name, account_number,
-                   facility, bill_date, total_billed, line_items with line_item_id, cpt_code, etc.).
+                   facility, bill_date, total_patient_billed, line_items with line_item_id, cpt_code, patient_owed, etc.).
         selected_item_ids: List of line_item_id (int) or id strings (e.g. "li-1") to include in the dispute.
         patient_details: Optional { fullName, mailingAddress, state, billingEmail }.
         recipient: Optional billing email; falls back to patient_details.billingEmail.
@@ -124,7 +133,7 @@ def build_case_for_gemini(
 ) -> dict:
     """
     Build case data for the dispute_letter Gemini prompt (patient_name, account_number,
-    facility, date_of_service, total_billed, disputed_charges_json, pricing_benchmarks_json).
+    facility, date_of_service, total_patient_billed, disputed_charges_json, pricing_benchmarks_json).
     """
     draft = build_draft(bill_data, selected_item_ids, benchmarks=benchmarks)
     report = draft["report"]
@@ -150,15 +159,11 @@ def build_case_for_gemini(
         lid = li.get("line_item_id") or (i + 1)
         if lid not in selected_ids:
             continue
-        total = li.get("total_charge")
-        if total is None:
-            qty = li.get("quantity", 1)
-            up = li.get("unit_price", 0)
-            total = float(up) * float(qty) if up is not None else 0
+        amount = _line_item_amount(li)
         disputed_charges.append({
             "cpt_code": li.get("cpt_code"),
             "description": li.get("description"),
-            "amount_billed": round(float(total), 2),
+            "amount_billed": round(amount, 2),
             "citation": li.get("citation"),
         })
         if date_of_service is None and li.get("date_of_service"):
@@ -173,7 +178,7 @@ def build_case_for_gemini(
         "account_number": bill_data.get("account_number") or "[ACCOUNT]",
         "facility": bill_data.get("facility") or "[FACILITY]",
         "date_of_service": date_of_service or "[DATE]",
-        "total_billed": bill_data.get("total_billed"),
+        "total_billed": bill_data.get("total_patient_billed") or bill_data.get("total_billed"),
         "disputed_charges_json": json.dumps(disputed_charges, indent=2),
         "pricing_benchmarks_json": benchmarks_json,
     }
