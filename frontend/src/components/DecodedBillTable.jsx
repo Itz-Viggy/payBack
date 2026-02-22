@@ -50,10 +50,10 @@ const severityConfig = {
   },
 }
 
-function getOverchargeSeverityClass(markup) {
-  if (markup > 3) return 'text-flag-high'
-  if (markup > 1.5) return 'text-flag-medium'
-  if (markup > 1) return 'text-flag-low'
+function getOverchargeSeverityClass(overcharge) {
+  if (overcharge >= 200) return 'text-flag-high'
+  if (overcharge >= 50) return 'text-flag-medium'
+  if (overcharge > 0) return 'text-flag-low'
   return 'text-text-secondary'
 }
 
@@ -132,7 +132,7 @@ export default function DecodedBillTable({
                     <td className="px-5 text-right font-mono text-sm text-text-secondary">
                       {formatCurrency(item.benchmark)}
                     </td>
-                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getOverchargeSeverityClass(item.markup)}`}>
+                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getOverchargeSeverityClass(item.overcharge)}`}>
                       ${formatOvercharge(item.billed, item.benchmark)}
                     </td>
                     <td className="px-5 text-right">
@@ -178,13 +178,13 @@ export default function DecodedBillTable({
                             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Benchmark</p>
                             <div className="mt-2 space-y-1 font-mono">
                               <p className="text-base font-semibold text-flag-high">
-                                Billed: {formatCurrencyDetailed(item.billed)}
+                                You paid: {formatCurrencyDetailed(item.billed)}
                               </p>
                               <p className="text-sm text-text-secondary">
-                                Negotiated: {formatCurrencyDetailed(item.negotiated)}
+                                Market rate: {formatCurrencyDetailed(item.benchmark)}
                               </p>
                               <p className="text-xs text-text-muted">
-                                Medicare: {formatCurrencyDetailed(item.medicare)}
+                                {item.billed <= item.benchmark ? 'Below market' : 'Above market'}
                               </p>
                             </div>
                           </div>

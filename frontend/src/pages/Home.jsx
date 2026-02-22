@@ -66,7 +66,7 @@ export default function Home() {
           className="rounded-lg border border-border-subtle bg-bg-surface p-5"
           style={{ animation: 'fadeUp 0.4s ease-out 0.55s both' }}
         >
-          <p className="font-mono text-3xl font-semibold text-amber">73%</p>
+          <p className="font-mono text-3xl font-semibold text-amber">80%</p>
           <p className="mt-2 font-display text-xs text-text-muted">of bills contain errors</p>
         </div>
         <div
