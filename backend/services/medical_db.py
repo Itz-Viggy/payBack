@@ -1,176 +1,156 @@
+import asyncio
 import json
-import requests
 import urllib.parse
-import time
 
-# --- YOUR OCR BILL DATA ---
-incoming_bill = {
-  "patient_name": "Marcus D. Holloway",
-  "account_number": "TGH-2025-084471",
-  "facility": "Tampa General Hospital",
-  "bill_date": "2025-04-14",
-  "total_billed": 51444.0,
-  "insurance": "BlueCross BlueShield of FL",
-  "line_items": [
-    { "line_item_id": 1, "cpt_code": "99223", "description": "Initial Hospital Care", "unit_price": 1420.0 },
-    { "line_item_id": 2, "cpt_code": "71046", "description": "Chest X-Ray, 2 Views", "unit_price": 890.0 },
-    { "line_item_id": 31, "cpt_code": "0100", "description": "Room & Board — Med/Surg", "unit_price": 3800.0 }
-    # Truncated for testing - add the rest of your 35 items here!
-  ]
-}
+import httpx
 
 BASE_URL = "https://www.dolthub.com/api/v1alpha1/dolthub/transparency-in-pricing/main"
 
-def run_dolt_query(sql_query, timeout_val=30): # ADDED: adjustable timeout parameter
-    """Executes the SQL query against the remote database."""
+# Semaphore: cap concurrent outbound requests to avoid hammering the remote API
+_SEMAPHORE = asyncio.Semaphore(15)
+
+
+async def _run_dolt_query(client: httpx.AsyncClient, sql_query: str, timeout_val: float = 30.0) -> dict:
+    """
+    Execute a SQL query against the remote DoltHub API.
+    Raises httpx.TimeoutException on timeout so the caller can retry.
+    """
     safe_query = urllib.parse.quote(sql_query)
     url = f"{BASE_URL}?q={safe_query}"
-    
-    # REMOVED the broad try/except here so the timeout can be caught by the loop below!
-    response = requests.get(url, timeout=timeout_val)
+    response = await client.get(url, timeout=timeout_val)
     if response.status_code == 200:
         return response.json()
-        
     return {"rows": []}
 
-def get_benchmarks(code, insurance_payer):
-    """Fetches a fast batch of pricing data and filters by insurance in Python."""
-    
-    search_column = "code"
-    short_payer = insurance_payer.split()[0].lower() # e.g., "bluecross"
-    
-    print(f"   ↳ Fetching rapid batch for {search_column}: {code}...")
-    
+
+async def get_benchmarks(client: httpx.AsyncClient, code: str, insurance_payer: str) -> list:
+    """
+    Fetch pricing benchmarks for a single CPT code.
+
+    Cascading retry: tries LIMIT 10 → 5 → 2.
+    If every attempt times out or fails, returns [].
+    Falls back to a market-average synthesised rate when the exact
+    insurance payer isn't found in the returned rows.
+    """
+    short_payer = insurance_payer.split()[0].lower()  # e.g. "bluecross"
+    print(f"   ↳ Fetching benchmarks for code: {code} ...")
+
     rows = []
-    
-    # --- ADDED: The Retry Loop ---
-    for limit in [10, 5,3]:
-        fast_query = f"""
-            SELECT hospital_id, payer_name, standard_charge
-            FROM `rate`
-            WHERE `code` = '{code}'
-            LIMIT {limit};
-        """
-        
-        try:
-            # We use a 5-second timeout so it fails fast and triggers the retry
-            results = run_dolt_query(fast_query, timeout_val=30)
-            rows = results.get("rows", [])
-            break # Success! Break out of the retry loop.
-            
-        except requests.exceptions.Timeout:
-            print(f"   ↳ [WARNING] Timeout on LIMIT {limit}. Retrying with lower limit...")
-            continue # Try the next limit in the list
-        except Exception as e:
-            print(f"   ↳ [ERROR] API Failed: {e}")
-            break # Stop trying if it's a completely different error
-    # -----------------------------
-    
+
+    # Cascading retry with decreasing LIMIT values
+    async with _SEMAPHORE:
+        for limit in [10, 5, 2]:
+            query = f"""
+                SELECT hospital_id, payer_name, standard_charge
+                FROM `rate`
+                WHERE `code` = '{code}'
+                LIMIT {limit};
+            """
+            try:
+                result = await _run_dolt_query(client, query, timeout_val=30.0)
+                rows = result.get("rows", [])
+                break  # Success — exit retry loop
+            except httpx.TimeoutException:
+                print(f"   ↳ [WARNING] Timeout on LIMIT {limit} for code {code}. Retrying...")
+                continue  # Try next (smaller) limit
+            except Exception as exc:
+                print(f"   ↳ [ERROR] Unexpected failure for code {code}: {exc}")
+                break  # Non-timeout error — don't bother retrying
+
     if not rows:
-        print(f"   ↳ Critical: No data found for code {code}.")
+        print(f"   ↳ No data found for code {code}.")
         return []
 
-    # 1. Look for the exact insurance match first
+    # 1. Look for an exact insurance match first
     specific_matches = [
-        row for row in rows 
+        row for row in rows
         if short_payer in str(row.get("payer_name", "")).lower()
     ]
 
     if specific_matches:
-        print(f"   ↳ Success! Found specific rates for {short_payer.capitalize()}.")
-        # Sort and return the specific matches
-        for i, match in enumerate(specific_matches):
-             print(f"        -> Match {i+1}: {match.get('payer_name')} | ${match.get('standard_charge')}")
-
+        print(f"   ↳ Found specific rates for {short_payer.capitalize()} (code {code}).")
         return sorted(specific_matches, key=lambda x: float(x["standard_charge"]))[:3]
-        
-    else:
-        # 2. THE NEW LOGIC: Calculate the Market Average
-        print(f"   ↳ No exact match for '{insurance_payer}'. Calculating market average from {len(rows)} rates...")
-        
-        valid_charges = []
-        for row in rows:
-            charge = row.get("standard_charge")
-            if charge is not None:
-                # Always safely cast to float in case the DB returned a string or integer
-                try:
-                    valid_charges.append(float(charge))
-                except ValueError:
-                    continue # Skip any weird data
-        
-        # If we successfully extracted numbers, calculate the mean
-        if valid_charges:
-            average_charge = sum(valid_charges) / len(valid_charges)
-            
-            print(f"[DEBUG] 🏆 FINAL SYNTHESIZED RATE: ${average_charge:.2f}")
 
-            # Return a 'synthesized' dictionary that perfectly mimics your DB structure
-            return [{
-                "hospital_id": "Various (Market Average)",
-                "payer_name": "Market Average (Estimated)",
-                "standard_charge": round(average_charge, 2)
-            }]
-            
-        return []
+    # 2. No exact match — synthesise a market average from whatever rows we have
+    print(f"   ↳ No exact match for '{insurance_payer}'. Calculating market average from {len(rows)} rates...")
+    valid_charges = []
+    for row in rows:
+        charge = row.get("standard_charge")
+        if charge is not None:
+            try:
+                valid_charges.append(float(charge))
+            except ValueError:
+                continue  # Skip malformed values
 
-def process_entire_bill(bill_json):
+    if valid_charges:
+        average_charge = sum(valid_charges) / len(valid_charges)
+        print(f"   ↳ Synthesised market average: ${average_charge:.2f}")
+        return [{
+            "hospital_id": "Various (Market Average)",
+            "payer_name": "Market Average (Estimated)",
+            "standard_charge": round(average_charge, 2),
+        }]
+
+    return []
+
+
+async def process_entire_bill(bill_json: dict) -> dict:
     """
-    Loops through the JSON array and builds the final AI payload.
+    Concurrently audit every line item in the bill against the remote
+    pricing database.
 
     Returns dict with:
-      - metadata: patient/account/total info
-      - audited_items: per-line-item billed vs benchmark
-      - extracted_codes: flat list of CPT codes  (for DB storage)
+      - metadata:        patient / account / total info
+      - audited_items:   per-line-item billed vs benchmark
+      - extracted_codes: flat list of CPT codes       (for DB storage)
       - standard_charges: flat list of benchmark dicts (for DB storage)
-      - billed_charges: flat list of floats from the PDF (for DB storage)
+      - billed_charges:  flat list of patient_owed floats (for DB storage)
     """
-    
     facility = bill_json.get("facility", "Unknown")
     insurance = bill_json.get("insurance", "Unknown")
-    
-    print(f"\n=== 🏥 STARTING AUDIT: {facility} | {insurance} ===\n")
-    
+    line_items = bill_json.get("line_items", [])
+
+    print(f"\n=== 🏥 STARTING ASYNC AUDIT: {facility} | {insurance} ===\n")
+
+    async with httpx.AsyncClient() as client:
+        # Map every line item to a concurrent benchmark-lookup task
+        tasks = [
+            get_benchmarks(client, item.get("cpt_code"), insurance)
+            for item in line_items
+        ]
+        # Fire all requests at the same time; semaphore inside get_benchmarks
+        # prevents us from opening more than 15 connections simultaneously
+        all_benchmarks = await asyncio.gather(*tasks)
+
+    # Assemble the final payload from results
     audited_items = []
     extracted_codes = []
     standard_charges = []
     billed_charges = []
-    
-    # Iterate through the JSON array
-    for item in bill_json.get("line_items", []):
+
+    for item, benchmarks in zip(line_items, all_benchmarks):
         code = item.get("cpt_code")
-        unit_price = float(item.get("patient_owed", 0) or 0)  # Updated to use patient_owed
-        print(f"Processing: {code} - {item.get('description')}")
-        
-        benchmarks = get_benchmarks(code, insurance)
-        
+        patient_owed = float(item.get("patient_owed", 0) or 0)
+
         audited_items.append({
             "billed_item": item,
-            "market_benchmarks": benchmarks
+            "market_benchmarks": benchmarks,
         })
-
-        # Build the parallel arrays for MongoDB storage
         extracted_codes.append(str(code) if code else "")
         standard_charges.append(benchmarks)
-        billed_charges.append(unit_price)  # Updated to use patient_owed
+        billed_charges.append(patient_owed)
 
     final_payload = {
         "metadata": {
             "patient": bill_json.get("patient_name"),
             "account": bill_json.get("account_number"),
-            "total_billed": bill_json.get("total_patient_billed") or bill_json.get("patient_owed")  # Updated to prioritize patient_owed
+            "total_billed": bill_json.get("total_patient_billed") or bill_json.get("total_billed"),
         },
         "audited_items": audited_items,
-        # Flat arrays for DB persistence
         "extracted_codes": extracted_codes,
         "standard_charges": standard_charges,
         "billed_charges": billed_charges,
     }
-    
-    print("\n=== ✅ AUDIT COMPLETE. GENERATING AI PAYLOAD ===")
+
+    print("\n=== ✅ ASYNC AUDIT COMPLETE ===")
     return final_payload
-
-# # Run the batch process
-# final_ai_context = process_entire_bill(incoming_bill)
-
-# # Print the final result that you will pass to GPT-4o
-# print(json.dumps(final_ai_context, indent=2))
