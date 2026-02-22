@@ -106,7 +106,7 @@ async def upload_bill(file: UploadFile = File(...)):
     print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
 
     # Layer 2: Process the entire bill using the medical DB service (benchmarking)
-    layer2_payload = process_entire_bill(extracted_data)
+    layer2_payload = await process_entire_bill(extracted_data)
     layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
     layer2_payload["state"] = extracted_data.get("state") or ""
     print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
