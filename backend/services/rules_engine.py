@@ -132,9 +132,11 @@ def run_rules(layer2_payload: dict[str, Any]) -> list[dict[str, Any]]:
         line_item_id = _line_id(item)
         if line_item_id is None:
             continue
-        billed_amount = _to_float(item.get("unit_price"))
+        billed_amount = _to_float(item.get("patient_owed"))
         if billed_amount is None:
             billed_amount = _to_float(item.get("total_charge"))
+        if billed_amount is None:
+            billed_amount = _to_float(item.get("unit_price"))
         if billed_amount is None:
             continue
 

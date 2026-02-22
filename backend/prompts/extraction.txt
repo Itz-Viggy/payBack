@@ -3,20 +3,24 @@
 
 You are a medical billing expert. Extract all line items from the following medical bill text into structured JSON.
 
+Match bills that have columns like "P. Owed", "Patient Owed", "Patient Responsibility", or "Amount You Owe" — use that value as the patient-owed amount per line (this is the amount used for comparison).
+
 For each line item, return:
 - line_item_id: sequential integer
 - cpt_code: the CPT or HCPCS billing code (string, or null if not found)
 - description: the service or procedure description
 - date_of_service: in YYYY-MM-DD format (or null if not found)
-- quantity: number of units billed
-- unit_price: price per unit in USD
-- total_charge: total charged amount in USD
+- quantity: number of units billed (Units column)
+- unit_price: price per unit in USD (if present; null otherwise)
+- total_charge: total charged amount in USD (if present; null otherwise)
+- patient_owed: the amount the patient owes for this line in USD — from "P. Owed", "Patient Owed", "Amount You Owe", or equivalent column. This is the primary amount used for comparison.
 - provider: name of the billing provider or department (if listed)
 
 Also extract at the bill level (if present):
 - insurance/payer name, member_id, group_number
 - diagnosis_codes: list of ICD-10 or diagnosis codes found anywhere on the document (header, footer, diagnosis section, line items, or any labeled field). Return empty array only if truly none present.
 - state: the facility or patient state abbreviation, e.g. "FL" (null if not found)
+- total_patient_billed: total amount the patient owes for the bill — from "PATIENT BALANCE DUE", "Total Patient Billed", "Amount You Owe", "Patient Responsibility Total", or equivalent. Do NOT use "Total Billed Charges" or insurer totals; use the patient’s total responsibility only.
 
 Return ONLY valid JSON in this format:
 {
@@ -24,7 +28,7 @@ Return ONLY valid JSON in this format:
   "account_number": "...",
   "facility": "...",
   "bill_date": "...",
-  "total_billed": 0.00,
+  "total_patient_billed": 0.00,
   "insurance": "...",
   "diagnosis_codes": [],
   "state": null,

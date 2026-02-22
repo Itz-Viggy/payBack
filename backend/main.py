@@ -181,6 +181,7 @@ def _line_item_query_text(item: dict) -> str:
         item.get("description") or "",
         f"CPT {item.get('cpt_code') or 'N/A'}",
         f"quantity {item.get('quantity', '')}",
+        f"patient owed {item.get('patient_owed', '')}",
         f"unit price {item.get('unit_price', '')}",
         f"total {item.get('total_charge', '')}",
     ]
