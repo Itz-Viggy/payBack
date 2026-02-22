@@ -10,11 +10,18 @@ import { formatCurrency, formatDateShort } from '../utils/format'
 /* ── helpers to transform backend shapes into component shapes ──────── */
 
 function classifySeverityByMarkup(markup) {
-  // Markup-based: ≤1.0 clear, 1.0–1.5 low, 1.5–3.0 medium, >3.0 high
   if (markup > 3) return 'high'
   if (markup > 1.5) return 'medium'
   if (markup > 1) return 'low'
   return 'clear'
+}
+
+/** Bump severity when there's a lot of money to save; otherwise returns 'clear' */
+function classifySeverityByOvercharge(overcharge) {
+  if (overcharge < 0.01) return 'clear'
+  if (overcharge >= 200) return 'high'
+  if (overcharge >= 50) return 'medium'
+  return 'low'
 }
 
 const SEVERITY_ORDER = { low: 1, medium: 2, high: 3 }
@@ -25,16 +32,36 @@ function pickWorstSeverity(a, b) {
   return SEVERITY_ORDER[a] >= SEVERITY_ORDER[b] ? a : b
 }
 
+const SMALL_AMOUNT_THRESHOLD = 25  // below this, unbundling/duplicates → low risk
+
 function buildLineItems(benchmarks, flags) {
-  return benchmarks.map((entry, idx) => {
+  // First pass: compute bestBench per entry
+  const rawItems = benchmarks.map((entry, idx) => {
     const item = entry.billed_item || {}
     const benches = entry.market_benchmarks || []
-
-    const billed = parseFloat(item.patient_owed || item.unit_price || item.total_charge || 0)
     const bestBench = benches.length
       ? Math.min(...benches.map((b) => parseFloat(b.standard_charge || 0)).filter(Boolean))
       : 0
+    return { idx, item, bestBench }
+  })
+
+  // Normalize benchmarks for duplicate CPT codes: use min across same-CPT items (avoids different benchmarks for same code)
+  const cptToMinBench = {}
+  for (const { item, bestBench } of rawItems) {
+    if (bestBench <= 0) continue
+    const code = item.cpt_code || 'N/A'
+    if (!(code in cptToMinBench) || bestBench < cptToMinBench[code]) {
+      cptToMinBench[code] = bestBench
+    }
+  }
+
+  return rawItems.map(({ idx, item, bestBench: rawBench }) => {
+    const code = item.cpt_code || 'N/A'
+    const bestBench = code in cptToMinBench ? cptToMinBench[code] : rawBench
+
+    const billed = parseFloat(item.patient_owed || item.unit_price || item.total_charge || 0)
     const markup = bestBench > 0 ? +(billed / bestBench).toFixed(2) : 0
+    const overcharge = Math.max(0, billed - bestBench)
 
     const sameValue = bestBench > 0 && Math.abs(billed - bestBench) < 0.01
     const markupSeverity = sameValue ? 'clear' : classifySeverityByMarkup(markup)
@@ -53,11 +80,22 @@ function buildLineItems(benchmarks, flags) {
       ? matchingFlags.reduce((worst, f) => pickWorstSeverity(worst, f.severity || 'medium'), null)
       : null
 
-    const finalSeverity = pickWorstSeverity(markupSeverity, flagSeverity) || markupSeverity
+    const overchargeSeverity = classifySeverityByOvercharge(overcharge)
+
+    // Combine: flags/markup still matter; high overcharge bumps severity to high/medium
+    let finalSeverity = pickWorstSeverity(
+      pickWorstSeverity(markupSeverity, flagSeverity),
+      overchargeSeverity
+    ) || markupSeverity
+
+    // Cap at LOW when amount at stake is small (unbundling/duplicates with $25 or less)
+    const amountAtStake = Math.max(billed, overcharge)
+    if (amountAtStake <= SMALL_AMOUNT_THRESHOLD && finalSeverity !== 'clear') {
+      finalSeverity = 'low'
+    }
+
     const primaryReason = flagReasons[0]?.message || (finalSeverity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.')
     const primaryCitation = matchingFlags[0]?.citation || (finalSeverity === 'clear' ? '' : '')
-
-    const overcharge = Math.max(0, billed - bestBench)
 
     return {
       id: `li-${lineId ?? idx + 1}`,
