@@ -105,9 +105,23 @@ async def upload_bill(file: UploadFile = File(...)):
 
     print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
 
-    # Process the entire bill using the medical DB service (for benchmarking, etc.)
-    benchmarks = process_entire_bill(extracted_data)
-    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(benchmarks, indent=2))
+    # Layer 2: Process the entire bill using the medical DB service (benchmarking)
+    layer2_payload = process_entire_bill(extracted_data)
+    layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
+    layer2_payload["state"] = extracted_data.get("state") or ""
+    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
+
+    # Layer 3: holistic findings from deterministic rules + Gemini relationship checks.
+    review_result = run_holistic_review(layer2_payload)
+    print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
+
+    # Store everything in memory so GET /bills/{bill_id} returns the full picture
+    BILLS_STORE[bill_id] = {
+        **extracted_data,
+        "flags": review_result["flags"],
+        "summary": review_result["summary"],
+        "benchmarks": layer2_payload.get("audited_items", []),
+    }
 
     # ── Persist to MongoDB ────────────────────────────────────────────────
     raw_ocr_text = converted.text or ""
@@ -116,15 +130,14 @@ async def upload_bill(file: UploadFile = File(...)):
 
     # Calculate estimated overcharge from benchmarks
     estimated_overcharge = 0.0
-    for i, billed in enumerate(benchmarks.get("billed_charges", [])):
-        sc_list = benchmarks.get("standard_charges", [])[i] if i < len(benchmarks.get("standard_charges", [])) else []
-        if sc_list:
-            best_benchmark = min(
-                (float(s.get("standard_charge", 0)) for s in sc_list if s.get("standard_charge")),
-                default=0,
-            )
-            if best_benchmark > 0 and billed > best_benchmark:
-                estimated_overcharge += billed - best_benchmark
+    for audited in layer2_payload.get("audited_items", []):
+        billed_item = audited.get("billed_item", {})
+        billed_amount = float(billed_item.get("unit_price", 0) or 0)
+        for bench in audited.get("market_benchmarks", []):
+            bench_charge = float(bench.get("standard_charge", 0) or 0)
+            if bench_charge > 0 and billed_amount > bench_charge:
+                estimated_overcharge += billed_amount - bench_charge
+                break  # only count best benchmark per item
 
     try:
         db_result = await store_bill_analysis(
@@ -132,9 +145,9 @@ async def upload_bill(file: UploadFile = File(...)):
             filename=file.filename or "upload",
             content_type=file.content_type,
             raw_ocr_text=raw_ocr_text,
-            extracted_codes=benchmarks.get("extracted_codes", []),
-            standard_charges=benchmarks.get("standard_charges", []),
-            billed_charges=benchmarks.get("billed_charges", []),
+            extracted_codes=layer2_payload.get("extracted_codes", []),
+            standard_charges=layer2_payload.get("standard_charges", []),
+            billed_charges=layer2_payload.get("billed_charges", []),
             hospital_name=hospital_name,
             total_billed=total_billed,
             estimated_overcharge=round(estimated_overcharge, 2) if estimated_overcharge else None,
@@ -149,23 +162,6 @@ async def upload_bill(file: UploadFile = File(...)):
         "billId": bill_id,
         "analysisId": db_result["bill_analysis_id"] if db_result else None,
     }
-    layer2_payload = process_entire_bill(extracted_data)
-    layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
-    layer2_payload["state"] = extracted_data.get("state") or ""
-    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
-
-    # Layer 3: holistic findings from deterministic rules + Gemini relationship checks.
-    review_result = run_holistic_review(layer2_payload)
-    print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
-
-    BILLS_STORE[bill_id] = {
-        **extracted_data,
-        "flags": review_result["flags"],
-        "summary": review_result["summary"],
-        "benchmarks": layer2_payload.get("audited_items", []),
-    }
-    
-    return {"billId": bill_id}
 
 
 @app.get("/bills/{bill_id}")
