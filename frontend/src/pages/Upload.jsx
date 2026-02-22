@@ -40,7 +40,7 @@ export default function Upload() {
         </p>
 
         <h1
-          className="mt-3 font-display text-5xl font-bold leading-[1.02] text-text-primary sm:text-[68px]"
+          className="mt-3 font-hero text-5xl font-extrabold tracking-tight leading-[1.05] text-text-primary sm:text-[68px]"
           style={{ animation: 'fadeUp 0.5s ease-out 0.20s both' }}
         >
           Your bill,
