@@ -132,7 +132,7 @@ async def upload_bill(file: UploadFile = File(...)):
     estimated_overcharge = 0.0
     for audited in layer2_payload.get("audited_items", []):
         billed_item = audited.get("billed_item", {})
-        billed_amount = float(billed_item.get("unit_price", 0) or 0)
+        billed_amount = float(billed_item.get("patient_owed", 0) or 0)  # Updated to use patient_owed
         for bench in audited.get("market_benchmarks", []):
             bench_charge = float(bench.get("standard_charge", 0) or 0)
             if bench_charge > 0 and billed_amount > bench_charge:

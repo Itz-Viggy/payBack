@@ -21,7 +21,7 @@ function buildLineItems(benchmarks, flags) {
     const item = entry.billed_item || {}
     const benches = entry.market_benchmarks || []
 
-    const billed = parseFloat(item.unit_price || item.total_charge || 0)
+    const billed = parseFloat(item.patient_owed || 0) // Updated to use patient_owed
     const bestBench = benches.length
       ? Math.min(...benches.map((b) => parseFloat(b.standard_charge || 0)).filter(Boolean))
       : 0
@@ -58,9 +58,9 @@ function buildReportData(bill, lineItems) {
 
   return {
     hospitalName: bill.facility || 'Unknown Facility',
-    accountNumber: bill.account_number || '—',
+    accountNumber: bill.account_number || '\u2014',
     dateOfService: bill.bill_date || '',
-    totalBilled: bill.total_billed || lineItems.reduce((s, i) => s + i.billed, 0),
+    totalBilled: bill.total_patient_billed || lineItems.reduce((s, i) => s + i.billed, 0), // Updated to use total_patient_billed
     flagsFound: flagged.length,
     estimatedOvercharge: Math.round(overcharge * 100) / 100,
   }
