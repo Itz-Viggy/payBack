@@ -131,15 +131,25 @@ async function searchPrecedents(query, topK = 5) {
   return payload;
 }
 
+/**
+ * Poll the real-time pipeline status for an in-progress bill upload.
+ * Returns { stage: number | "done" | "error", error: string | null }
+ */
+async function getBillStatus(billId) {
+  const response = await fetch(`${baseURL}/bills/${billId}/status`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch bill status.');
+  }
+  return response.json();
+}
+
 export const api = {
   baseURL,
   uploadBill,
   getBill,
+  getBillStatus,
   getHistory,
   updateStatus,
   getPrecedents,
   searchPrecedents,
-  // getAnalysisResult(billId) -> { decoded, flags, ... }
-  // buildDisputeCase(billId, selectedFlagIds) -> { caseId, letterPreview, ... }
-  // sendDisputeEmail(caseId, recipient) -> { sent: true }
 };

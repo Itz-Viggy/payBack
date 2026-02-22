@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import ProgressTracker from '../components/ProgressTracker'
 import { api } from '../api/client'
 
+// These labels must stay in the same order as the stage indices emitted by the backend:
+// stage 0 → File validated
+// stage 1 → PDF converted
+// stage 2 → Extracting line items
+// stage 3 → Hospital rate lookup
+// stage 4 → Error detection
+// stage 5 → Assembling report
 const pipelineSteps = [
   'File validated',
   'PDF converted',
@@ -12,85 +19,126 @@ const pipelineSteps = [
   'Assembling report',
 ]
 
+const POLL_INTERVAL_MS = 1500
+
 export default function Processing() {
   const navigate = useNavigate()
   const { billId } = useParams()
   const location = useLocation()
+
   const [activeLine, setActiveLine] = useState(0)
+  const [errorMsg, setErrorMsg] = useState(null)
+
   const uploadStartedRef = useRef(false)
+  const pollTimerRef = useRef(null)
 
   const pendingFile = location.state?.file
   const fileName = location.state?.fileName ?? 'uploaded-bill.pdf'
 
+  // ── Phase 1: "pending" — fire upload, get billId, then redirect to /processing/{billId}
   useEffect(() => {
-    if (!billId) {
-      navigate('/', { replace: true })
+    if (billId !== 'pending') return
+
+    if (!pendingFile) {
+      navigate('/', {
+        replace: true,
+        state: { uploadError: 'Upload session expired. Please select the file again.' },
+      })
       return
     }
 
+    if (uploadStartedRef.current) return
+    uploadStartedRef.current = true
+
+    setActiveLine(0) // File validated (we validated it client-side before navigating here)
+
+    ;(async () => {
+      try {
+        const response = await api.uploadBill(pendingFile)
+        // Backend returns {billId} immediately; pipeline runs in background
+        navigate(`/processing/${response.billId}`, {
+          replace: true,
+          state: { fileName },
+        })
+      } catch (error) {
+        navigate('/', {
+          replace: true,
+          state: { uploadError: error.message || 'Upload failed. Please try again.' },
+        })
+      }
+    })()
+  }, [billId, fileName, navigate, pendingFile])
+
+  // ── Phase 2: real billId — poll /bills/{billId}/status and advance the step card
+  useEffect(() => {
+    if (billId === 'pending' || !billId) return
+
     let cancelled = false
 
-    const runPipeline = async () => {
-      if (billId === 'pending') {
-        if (!pendingFile) {
-          navigate('/', {
-            replace: true,
-            state: { uploadError: 'Upload session expired. Please select the file again.' },
-          })
+    const poll = async () => {
+      try {
+        const { stage, error } = await api.getBillStatus(billId)
+
+        if (cancelled) return
+
+        if (stage === 'error') {
+          setErrorMsg(error || 'An error occurred during processing.')
           return
         }
 
-        if (uploadStartedRef.current) return
-        uploadStartedRef.current = true
-
-        setActiveLine(2)
-        try {
-          const response = await api.uploadBill(pendingFile)
-          navigate(`/processing/${response.billId}`, {
-            replace: true,
-            state: { fileName },
-          })
-        } catch (error) {
-          navigate('/', {
-            replace: true,
-            state: { uploadError: error.message || 'Upload failed. Please try again.' },
-          })
+        if (stage === 'done') {
+          // Show all steps as complete briefly before navigating
+          setActiveLine(pipelineSteps.length)
+          window.setTimeout(() => {
+            if (!cancelled) navigate(`/results/${billId}`, { replace: true, state: { fileName } })
+          }, 500)
+          return
         }
-        return
-      }
 
-      const stepDelaysMs = [1000, 2000, 5000, 700, 700, 700]
-      for (let index = 0; index < pipelineSteps.length; index += 1) {
-        if (cancelled) return
-        setActiveLine(index)
-        const delay = stepDelaysMs[index] ?? 700
-        await new Promise((resolve) => window.setTimeout(resolve, delay))
-      }
+        // stage is a number (0–5) — advance the active step
+        setActiveLine(typeof stage === 'number' ? stage : 0)
 
-      if (!cancelled) {
-        window.setTimeout(() => {
-          navigate(`/results/${billId}`, {
-            replace: true,
-            state: {
-              fileName,
-            },
-          })
-        }, 350)
+        // Schedule the next poll
+        pollTimerRef.current = window.setTimeout(poll, POLL_INTERVAL_MS)
+      } catch {
+        if (!cancelled) {
+          // Backend might not have the entry yet; retry silently
+          pollTimerRef.current = window.setTimeout(poll, POLL_INTERVAL_MS)
+        }
       }
     }
 
-    runPipeline()
+    poll()
 
     return () => {
       cancelled = true
+      if (pollTimerRef.current) window.clearTimeout(pollTimerRef.current)
     }
-  }, [billId, fileName, navigate, pendingFile])
+  }, [billId, fileName, navigate])
 
-  const subLabel = useMemo(() => {
-    if (activeLine < 2) return 'Reading your bill...'
-    if (activeLine < 5) return 'Matching hospital rates...'
-    return 'Assembling report...'
-  }, [activeLine])
+  const subLabel =
+    activeLine < 2
+      ? 'Reading your bill...'
+      : activeLine < 4
+        ? 'Matching hospital rates...'
+        : 'Assembling report...'
+
+  if (errorMsg) {
+    return (
+      <>
+        <ProgressTracker activeStep={1} subLabel="Processing failed" />
+        <section className="mt-10 flex flex-col items-center gap-4">
+          <p className="font-mono text-sm text-flag-high">{errorMsg}</p>
+          <button
+            className="font-mono text-xs uppercase tracking-widest text-amber underline"
+            onClick={() => navigate('/', { replace: true })}
+          >
+            Try again
+          </button>
+        </section>
+      </>
+    )
+  }
 
   return (
     <>
@@ -147,3 +195,4 @@ export default function Processing() {
     </>
   )
 }
+

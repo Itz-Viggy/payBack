@@ -32,6 +32,8 @@ _debug_log("startup env check", {"cwd": os.getcwd(), "backend_dir": str(_backend
 
 from pydantic import BaseModel
 
+import asyncio
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from services.gemini_service import ExtractionError, extract_bill
@@ -47,6 +49,17 @@ from services.rules_engine import run_holistic_review
 
 app = FastAPI(title="PayBack API", version="0.1.0")
 BILLS_STORE: dict[str, dict] = {}
+
+# Pipeline stage index matches the frontend pipelineSteps array:
+# 0 = File validated
+# 1 = PDF converted
+# 2 = Extracting line items
+# 3 = Hospital rate lookup
+# 4 = Error detection
+# 5 = Assembling report
+# "done" = complete — frontend navigates away
+# "error" = pipeline failed
+PIPELINE_STATUS: dict[str, dict] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -68,7 +81,11 @@ def health():
 
 @app.post("/bills/upload")
 async def upload_bill(file: UploadFile = File(...)):
-    """Upload a bill file, run the full pipeline, and persist results to MongoDB."""
+    """
+    Accept a bill file, validate + convert it synchronously, then fire the
+    full analysis pipeline as a background task.  Returns {billId} immediately
+    so the frontend can start polling /bills/{billId}/status.
+    """
     content = await file.read()
 
     try:
@@ -88,80 +105,110 @@ async def upload_bill(file: UploadFile = File(...)):
     if not converted.text and not converted.images:
         raise HTTPException(status_code=400, detail="File is empty or could not be read.")
 
-    # Debug: print what was extracted (backend console)
-    print("--- [upload] extraction result ---")
-    if converted.text:
-        print(f"[upload] Extracted text ({len(converted.text)} chars):\n{converted.text}")
-    else:
-        n = len(converted.images or [])
-        total_bytes = sum(len(img) for img in (converted.images or []))
-        print(f"[upload] Extracted {n} image(s), {total_bytes} bytes total (mime={converted.image_mime})")
-
+    # Stage 0 (File validated) and Stage 1 (PDF converted) are done synchronously above.
     bill_id = f"bill-{uuid.uuid4().hex[:12]}"
-    try:
-        extracted_data = extract_bill(converted.text, converted.images)
-    except ExtractionError as exc:
-        raise HTTPException(status_code=500, detail=f"Gemini extraction failed: {exc}") from exc
+    PIPELINE_STATUS[bill_id] = {"stage": 1, "error": None}
 
-    print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
-
-    # Layer 2: Process the entire bill using the medical DB service (benchmarking)
-    layer2_payload = await process_entire_bill(extracted_data)
-    layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
-    layer2_payload["state"] = extracted_data.get("state") or ""
-    print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
-
-    # Layer 3: holistic findings from deterministic rules + Gemini relationship checks.
-    review_result = run_holistic_review(layer2_payload)
-    print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
-
-    # Store everything in memory so GET /bills/{bill_id} returns the full picture
-    BILLS_STORE[bill_id] = {
-        **extracted_data,
-        "flags": review_result["flags"],
-        "summary": review_result["summary"],
-        "benchmarks": layer2_payload.get("audited_items", []),
-    }
-
-    # ── Persist to MongoDB ────────────────────────────────────────────────
-    raw_ocr_text = converted.text or ""
-    hospital_name = extracted_data.get("facility")
-    total_billed = extracted_data.get("total_billed")
-
-    # Calculate estimated overcharge from benchmarks
-    estimated_overcharge = 0.0
-    for audited in layer2_payload.get("audited_items", []):
-        billed_item = audited.get("billed_item", {})
-        billed_amount = float(billed_item.get("patient_owed", 0) or 0)  # Updated to use patient_owed
-        for bench in audited.get("market_benchmarks", []):
-            bench_charge = float(bench.get("standard_charge", 0) or 0)
-            if bench_charge > 0 and billed_amount > bench_charge:
-                estimated_overcharge += billed_amount - bench_charge
-                break  # only count best benchmark per item
-
-    try:
-        db_result = await store_bill_analysis(
-            file_bytes=content,
+    # Fire the expensive pipeline in the background so the HTTP response returns now.
+    asyncio.create_task(
+        _run_pipeline(
+            bill_id=bill_id,
+            converted=converted,
+            content=content,
             filename=file.filename or "upload",
-            content_type=file.content_type,
-            raw_ocr_text=raw_ocr_text,
-            extracted_codes=layer2_payload.get("extracted_codes", []),
-            standard_charges=layer2_payload.get("standard_charges", []),
-            billed_charges=layer2_payload.get("billed_charges", []),
-            hospital_name=hospital_name,
-            total_billed=total_billed,
-            estimated_overcharge=round(estimated_overcharge, 2) if estimated_overcharge else None,
+            content_type=file.content_type or "application/octet-stream",
         )
-        print(f"[history] Stored analysis: {db_result['bill_analysis_id']}")
-    except Exception as exc:
-        # Don't fail the upload if DB persistence fails — log and continue
-        print(f"[history] WARNING — failed to persist: {exc}")
-        db_result = None
+    )
 
-    return {
-        "billId": bill_id,
-        "analysisId": db_result["bill_analysis_id"] if db_result else None,
-    }
+    return {"billId": bill_id}
+
+
+async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, content_type: str):
+    """Background task: runs all analysis layers and writes results to BILLS_STORE."""
+    try:
+        # Stage 2: Gemini text / image extraction
+        PIPELINE_STATUS[bill_id] = {"stage": 2, "error": None}
+        try:
+            extracted_data = extract_bill(converted.text, converted.images)
+        except ExtractionError as exc:
+            PIPELINE_STATUS[bill_id] = {"stage": "error", "error": str(exc)}
+            return
+
+        print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
+
+        # Stage 3: Hospital rate lookup (concurrent async benchmarking)
+        PIPELINE_STATUS[bill_id] = {"stage": 3, "error": None}
+        layer2_payload = await process_entire_bill(extracted_data)
+        layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
+        layer2_payload["state"] = extracted_data.get("state") or ""
+        print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
+
+        # Stage 4: Error detection (deterministic rules engine)
+        PIPELINE_STATUS[bill_id] = {"stage": 4, "error": None}
+        review_result = run_holistic_review(layer2_payload)
+        print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
+
+        # Stage 5: Assembling final report object
+        PIPELINE_STATUS[bill_id] = {"stage": 5, "error": None}
+        BILLS_STORE[bill_id] = {
+            **extracted_data,
+            "flags": review_result["flags"],
+            "summary": review_result["summary"],
+            "benchmarks": layer2_payload.get("audited_items", []),
+        }
+
+        # ── Persist to MongoDB ─────────────────────────────────────────────
+        raw_ocr_text = converted.text or ""
+        hospital_name = extracted_data.get("facility")
+        total_billed = extracted_data.get("total_billed")
+
+        estimated_overcharge = 0.0
+        for audited in layer2_payload.get("audited_items", []):
+            billed_item = audited.get("billed_item", {})
+            billed_amount = float(billed_item.get("patient_owed", 0) or 0)
+            for bench in audited.get("market_benchmarks", []):
+                bench_charge = float(bench.get("standard_charge", 0) or 0)
+                if bench_charge > 0 and billed_amount > bench_charge:
+                    estimated_overcharge += billed_amount - bench_charge
+                    break
+
+        try:
+            db_result = await store_bill_analysis(
+                file_bytes=content,
+                filename=filename,
+                content_type=content_type,
+                raw_ocr_text=raw_ocr_text,
+                extracted_codes=layer2_payload.get("extracted_codes", []),
+                standard_charges=layer2_payload.get("standard_charges", []),
+                billed_charges=layer2_payload.get("billed_charges", []),
+                hospital_name=hospital_name,
+                total_billed=total_billed,
+                estimated_overcharge=round(estimated_overcharge, 2) if estimated_overcharge else None,
+            )
+            analysis_id = db_result["bill_analysis_id"]
+            print(f"[history] Stored analysis: {analysis_id}")
+        except Exception as exc:
+            print(f"[history] WARNING — failed to persist: {exc}")
+            analysis_id = None
+
+        # Attach the analysisId to the in-memory record so the frontend can read it
+        BILLS_STORE[bill_id]["analysisId"] = analysis_id
+
+        # Mark pipeline complete — polling frontend will navigate to /results/{bill_id}
+        PIPELINE_STATUS[bill_id] = {"stage": "done", "error": None}
+
+    except Exception as exc:
+        print(f"[pipeline] UNHANDLED ERROR for {bill_id}: {exc}")
+        PIPELINE_STATUS[bill_id] = {"stage": "error", "error": str(exc)}
+
+
+@app.get("/bills/{bill_id}/status")
+def get_bill_status(bill_id: str):
+    """Poll this endpoint to get the real-time pipeline stage for a bill upload."""
+    entry = PIPELINE_STATUS.get(bill_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Status not found")
+    return entry
 
 
 @app.get("/bills/{bill_id}")
