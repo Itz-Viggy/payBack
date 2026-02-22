@@ -43,8 +43,12 @@ DB_NAME = "payback"
 _motor_client: AsyncIOMotorClient = AsyncIOMotorClient(MONGODB_URI)
 db = _motor_client[DB_NAME]
 
-bill_analyses_col   = db["bill_analyses"]
+bill_analyses_col    = db["bill_analyses"]
 dispute_statuses_col = db["dispute_statuses"]
+
+# Isolated demo collections — never mixed with real pipeline data
+demo_analyses_col    = db["demo_bill_analyses"]
+demo_statuses_col    = db["demo_dispute_statuses"]
 
 fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name="bill_files")
 
@@ -58,7 +62,10 @@ class DisputeStatus(str, Enum):
     reviewing_markup  = "reviewing_markup"   # user on /results — reviewing OCR vs DB prices
     drafting_dispute  = "drafting_dispute"   # user on /draft   — editing the AI letter
     pending_response  = "pending_response"   # letter sent; waiting on hospital
-    # Terminal state
+    # Terminal states — shown in History
+    approved          = "approved"           # hospital accepted the dispute
+    denied            = "denied"             # hospital denied the dispute
+    # Legacy terminal state (kept for back-compat)
     closed            = "closed"
 
 
@@ -91,6 +98,7 @@ class AnalysisSummary(BaseModel):
     hospital_name: str | None = None
     total_billed: float | None = None
     estimated_overcharge: float | None = None
+    num_codes_flagged: int = 0
     extracted_codes: list[str] = []
     standard_charges: list[Any] = []
     billed_charges: list[float] = []
@@ -229,7 +237,7 @@ async def get_all_analyses():
                 "standard_charges": 1,
                 "billed_charges": 1,
                 "created_at": 1,
-                "status": {"$ifNull": ["$dispute.status", "pending"]},
+                "status": {"$ifNull": ["$dispute.status", "reviewing_markup"]},
                 "updated_at": "$dispute.updated_at",
             }
         },
@@ -237,6 +245,7 @@ async def get_all_analyses():
 
     results: list[AnalysisSummary] = []
     async for doc in bill_analyses_col.aggregate(pipeline):
+        codes = doc.get("extracted_codes", [])
         results.append(
             AnalysisSummary(
                 id=str(doc["_id"]),
@@ -244,10 +253,68 @@ async def get_all_analyses():
                 hospital_name=doc.get("hospital_name"),
                 total_billed=doc.get("total_billed"),
                 estimated_overcharge=doc.get("estimated_overcharge"),
-                extracted_codes=doc.get("extracted_codes", []),
+                num_codes_flagged=len(codes),
+                extracted_codes=codes,
                 standard_charges=doc.get("standard_charges", []),
                 billed_charges=doc.get("billed_charges", []),
-                status=doc.get("status", "pending"),
+                status=doc.get("status", "reviewing_markup"),
+                created_at=doc["created_at"].isoformat() if isinstance(doc.get("created_at"), datetime) else str(doc.get("created_at", "")),
+                updated_at=doc["updated_at"].isoformat() if isinstance(doc.get("updated_at"), datetime) else None,
+            )
+        )
+    return results
+
+
+# ---------------------------------------------------------------------------
+# GET /api/history/demo  — isolated demo data, never touches real collections
+# ---------------------------------------------------------------------------
+@router.get("/demo", response_model=list[AnalysisSummary])
+async def get_demo_analyses():
+    """
+    Return demo bill analyses from the isolated demo_bill_analyses /
+    demo_dispute_statuses collections. These are never mixed with real
+    pipeline data and are only used for the History page showcase.
+    """
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "demo_dispute_statuses",
+                "localField": "_id",
+                "foreignField": "bill_analysis_id",
+                "as": "dispute",
+            }
+        },
+        {"$unwind": {"path": "$dispute", "preserveNullAndEmptyArrays": True}},
+        {"$sort": {"created_at": -1}},
+        {
+            "$project": {
+                "_id": 1,
+                "hospital_name": 1,
+                "total_billed": 1,
+                "estimated_overcharge": 1,
+                "extracted_codes": 1,
+                "created_at": 1,
+                "status": {"$ifNull": ["$dispute.status", "approved"]},
+                "updated_at": "$dispute.updated_at",
+            }
+        },
+    ]
+
+    results: list[AnalysisSummary] = []
+    async for doc in demo_analyses_col.aggregate(pipeline):
+        codes = doc.get("extracted_codes", [])
+        results.append(
+            AnalysisSummary(
+                id=str(doc["_id"]),
+                file_id="",
+                hospital_name=doc.get("hospital_name"),
+                total_billed=doc.get("total_billed"),
+                estimated_overcharge=doc.get("estimated_overcharge"),
+                num_codes_flagged=len(codes),
+                extracted_codes=codes,
+                standard_charges=[],
+                billed_charges=[],
+                status=doc.get("status", "approved"),
                 created_at=doc["created_at"].isoformat() if isinstance(doc.get("created_at"), datetime) else str(doc.get("created_at", "")),
                 updated_at=doc["updated_at"].isoformat() if isinstance(doc.get("updated_at"), datetime) else None,
             )

@@ -49,6 +49,18 @@ async function getHistory() {
 }
 
 /**
+ * Fetch demo history records from the isolated demo collections.
+ * Used exclusively by HistoryPage for showcase purposes.
+ */
+async function getDemoHistory() {
+  const response = await fetch(`${baseURL}/api/history/demo`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch demo history.');
+  }
+  return response.json();
+}
+
+/**
  * Update the dispute status for a given analysis.
  * @param {string} analysisId - The bill_analysis ObjectId string.
  * @param {string} status - One of: pending, email_sent, waiting_response, denied, success, closed.
@@ -199,6 +211,7 @@ export const api = {
   getBill,
   getBillStatus,
   getHistory,
+  getDemoHistory,
   getAnalysis,
   updateStatus,
   getPrecedents,

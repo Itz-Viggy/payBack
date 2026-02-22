@@ -151,7 +151,21 @@ async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, 
             "benchmarks": final_state.get("audited_items", []),
         }
 
-        # ── Persist to MongoDB (same call as before) ──────────────────────
+        # ── Persist to MongoDB ─────────────────────────────────────────────
+        raw_ocr_text = converted.text or ""
+        hospital_name = extracted_data.get("facility")
+        total_billed = extracted_data.get("total_patient_billed") or extracted_data.get("total_billed")
+
+        estimated_overcharge = 0.0
+        for audited in layer2_payload.get("audited_items", []):
+            billed_item = audited.get("billed_item", {})
+            billed_amount = float(billed_item.get("patient_owed", 0) or 0)
+            for bench in audited.get("market_benchmarks", []):
+                bench_charge = float(bench.get("standard_charge", 0) or 0)
+                if bench_charge > 0 and billed_amount > bench_charge:
+                    estimated_overcharge += billed_amount - bench_charge
+                    break
+
         try:
             db_result = await store_bill_analysis(
                 file_bytes=content,
