@@ -21,9 +21,16 @@ def build_graph():
     g.add_edge("ocr", "extract")
     g.add_edge("extract", "query")
     g.add_edge("query", "rules")
-    g.add_edge("rules", END)
+    g.add_conditional_edges("rules", _rules_next, {"rules": "rules", "end": END})
 
     return g.compile()
+
+
+def _rules_next(state: PayBackState) -> str:
+    """After rules: run second pass, then end."""
+    if state.get("_rules_pass") == 1:
+        return "rules"
+    return "end"
 
 
 pipeline = build_graph()

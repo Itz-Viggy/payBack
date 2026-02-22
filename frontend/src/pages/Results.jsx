@@ -298,6 +298,29 @@ export default function Results() {
 
   const [filter, setFilter] = useState('all')
   const [selectedItemIds, setSelectedItemIds] = useState([])
+  const [rerunLoading, setRerunLoading] = useState(false)
+  const [rerunError, setRerunError] = useState(null)
+
+  const handleRerunRules = async () => {
+    if (!billId) return
+    setRerunError(null)
+    setRerunLoading(true)
+    try {
+      const bill = await api.rerunRules(billId)
+      const items = buildLineItems(bill.benchmarks || [], bill.flags || [])
+      const report = buildReportData(bill, items)
+      setLineItems(items)
+      setReportData(report)
+      setSelectedItemIds(items.filter((i) => i.severity !== 'clear').map((i) => i.id))
+    } catch (err) {
+      const msg = err.message || 'Re-check failed.'
+      setRerunError(msg.includes('not found') || msg.includes('404')
+        ? 'Bill session expired. Re-upload the bill to use Re-check rules.'
+        : msg)
+    } finally {
+      setRerunLoading(false)
+    }
+  }
 
   /* ── Fetch bill data — supports both new-bill (billId) and resume (analysisId) ── */
   useEffect(() => {
@@ -449,7 +472,15 @@ export default function Results() {
   }
 
   return (
-    <section className="pb-24">
+    <section className="relative pb-24">
+      {rerunLoading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-bg-base/95 backdrop-blur-sm">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-amber border-t-transparent" />
+          <p className="font-display text-lg font-semibold text-amber">Re-checking rules…</p>
+          <p className="font-mono text-sm text-text-muted">Cross-referencing with AI and precedent data</p>
+        </div>
+      )}
+
       <ProgressTracker activeStep={3} subLabel="Flags found. Review evidence and select charges." />
 
       <section className="surface-panel mt-4 border-border-subtle px-5 py-6 sm:px-8">
@@ -486,6 +517,25 @@ export default function Results() {
             </div>
           </div>
         </div>
+
+        {billId && (
+          <div className="mt-6 border-t border-border-subtle pt-6">
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                onClick={handleRerunRules}
+                disabled={rerunLoading}
+                className="inline-flex items-center gap-2 rounded-sharp border border-amber px-4 py-2.5 font-mono text-sm font-semibold uppercase tracking-wider text-amber transition hover:bg-amber-dim active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50"
+              >
+                <span className="text-base">↻</span>
+                Re-check rules
+              </button>
+            </div>
+            {rerunError && (
+              <p className="mt-3 font-mono text-sm text-flag-high">{rerunError}</p>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="mt-8 grid gap-6 xl:grid-cols-[1fr_320px]">

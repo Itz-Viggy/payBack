@@ -152,20 +152,6 @@ async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, 
         }
 
         # ── Persist to MongoDB ─────────────────────────────────────────────
-        raw_ocr_text = converted.text or ""
-        hospital_name = extracted_data.get("facility")
-        total_billed = extracted_data.get("total_patient_billed") or extracted_data.get("total_billed")
-
-        estimated_overcharge = 0.0
-        for audited in layer2_payload.get("audited_items", []):
-            billed_item = audited.get("billed_item", {})
-            billed_amount = float(billed_item.get("patient_owed", 0) or 0)
-            for bench in audited.get("market_benchmarks", []):
-                bench_charge = float(bench.get("standard_charge", 0) or 0)
-                if bench_charge > 0 and billed_amount > bench_charge:
-                    estimated_overcharge += billed_amount - bench_charge
-                    break
-
         try:
             db_result = await store_bill_analysis(
                 file_bytes=content,
@@ -208,6 +194,38 @@ def get_bill(bill_id: str):
     if bill_id not in BILLS_STORE:
         raise HTTPException(status_code=404, detail="Bill not found")
     return BILLS_STORE[bill_id]
+
+
+@app.post("/bills/{bill_id}/rerun-rules")
+def rerun_rules(bill_id: str):
+    """Re-run the rules engine on the stored bill. Updates flags/summary in BILLS_STORE."""
+    if bill_id not in BILLS_STORE:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    bill = BILLS_STORE[bill_id]
+    from services.rules_engine import run_holistic_review
+
+    layer2_payload = {
+        "audited_items": bill.get("benchmarks", []),
+        "diagnosis_codes": bill.get("diagnosis_codes", []),
+        "state": bill.get("state", ""),
+    }
+    review = run_holistic_review(layer2_payload)
+
+    estimated_overcharge = 0.0
+    for audited in bill.get("benchmarks", []):
+        billed_item = audited.get("billed_item", {})
+        billed_amount = float(billed_item.get("patient_owed", 0) or 0)
+        for bench in audited.get("market_benchmarks", []):
+            bench_charge = float(bench.get("standard_charge", 0) or 0)
+            if bench_charge > 0 and billed_amount > bench_charge:
+                estimated_overcharge += billed_amount - bench_charge
+                break
+
+    bill["flags"] = review["flags"]
+    bill["summary"] = review["summary"]
+    bill["estimated_overcharge"] = round(estimated_overcharge, 2) if estimated_overcharge else None
+    return bill
 
 
 def _line_item_query_text(item: dict) -> str:

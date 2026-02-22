@@ -35,3 +35,6 @@ class PayBackState(TypedDict, total=False):
 
     # Non-fatal errors collected during the run
     errors: list[str]
+    # Internal: rules pass counter (1 = first pass, 2 = second pass / done)
+    _rules_pass: int
+
