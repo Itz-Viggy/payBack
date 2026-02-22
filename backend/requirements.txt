@@ -36,3 +36,6 @@ numpy>=1.26.0,<3            # Normalization for COSINE similarity (used by prece
 # (Gemini's google-ai-generativelanguage wants protobuf<5; protobuf 5/6 is required for actiancortex. If Gemini breaks, use a separate venv for vector DB.)
 sentence-transformers>=3.0.0,<4  # Local embeddings (all-MiniLM-L6-v2) for precedent search
 grpcio-tools>=1.68.1        # Required by actiancortex (not installed when using --no-deps)
+
+# ── LangGraph (Agentic Pipeline) ────────────────────────────
+langgraph>=0.2.0            # StateGraph pipeline orchestration (pulls in langchain-core)
