@@ -24,5 +24,8 @@ Return ONLY valid JSON:
 
 If no issues are found, return: { "flags": [] }
 
+Similar historical cases (use for context on how similar billing issues were identified and approached in the past):
+{{similar_cases_context}}
+
 Line items:
 {{line_items_json}}

@@ -88,12 +88,44 @@ async function getPrecedents(billId, topK = 5) {
   return payload;
 }
 
+/**
+ * Search precedents by free-form query (e.g. built from selected line items).
+ * Returns { precedents: [ { id, score, payload } ] }
+ */
+async function searchPrecedents(query, topK = 5) {
+  let response;
+  try {
+    response = await fetch(`${baseURL}/precedents/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, top_k: topK }),
+    });
+  } catch (error) {
+    throw new Error('Unable to reach backend for precedent search.');
+  }
+
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+
+  if (!response.ok) {
+    const message = payload?.detail || 'Precedent search failed.';
+    throw new Error(message);
+  }
+
+  return payload;
+}
+
 export const api = {
   baseURL,
   uploadBill,
   getHistory,
   updateStatus,
   getPrecedents,
+  searchPrecedents,
   // getAnalysisResult(billId) -> { decoded, flags, ... }
   // buildDisputeCase(billId, selectedFlagIds) -> { caseId, letterPreview, ... }
   // sendDisputeEmail(caseId, recipient) -> { sent: true }

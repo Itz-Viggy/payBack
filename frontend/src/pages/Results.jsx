@@ -1,10 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import ProgressTracker from '../components/ProgressTracker'
 import DecodedBillTable from '../components/DecodedBillTable'
-import FlagCard from '../components/FlagCard'
+import { api } from '../api/client'
 import { formatCurrency, formatDateShort } from '../utils/format'
+
+const severityBadge = {
+  high: 'border-flag-high-border bg-flag-high-dim text-flag-high',
+  medium: 'border-flag-medium-border bg-flag-medium-dim text-flag-medium',
+  low: 'border-flag-low-border bg-flag-low-dim text-flag-low',
+}
 
 const reportData = {
   hospitalName: 'Massachusetts General Hospital',
@@ -164,6 +170,162 @@ const filterOptions = [
   { id: 'clear', label: 'CLEAN' },
 ]
 
+function buildPrecedentQuery(items) {
+  if (!items?.length) return ''
+  return items
+    .map((item) => [
+      item.cptCode,
+      item.description,
+      item.billed != null ? `$${item.billed}` : '',
+      item.benchmark != null ? `benchmark $${item.benchmark}` : '',
+    ])
+    .flat()
+    .filter(Boolean)
+    .join(' ')
+}
+
+function CompactPrecedentCard({ precedent, onClick }) {
+  const { score, payload } = precedent
+  const severity = payload?.severity ?? 'low'
+  const badge = severityBadge[severity] ?? severityBadge.low
+  const summary = payload?.summary ?? ''
+  const truncated = summary.length > 80 ? `${summary.slice(0, 80)}…` : summary
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full rounded-sharp border border-border-subtle bg-bg-surface p-4 text-left transition hover:border-amber-border hover:bg-amber-dim/30"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
+          {Math.round((score ?? 0) * 100)}% MATCH
+        </span>
+        <span
+          className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
+        >
+          {severity}
+        </span>
+      </div>
+      <p className="mt-2 font-display text-[13px] leading-6 text-text-secondary line-clamp-3">{truncated}</p>
+    </button>
+  )
+}
+
+function PrecedentDetailModal({ precedent, onClose }) {
+  if (!precedent) return null
+  const { score, payload } = precedent
+  const severity = payload?.severity ?? 'low'
+  const badge = severityBadge[severity] ?? severityBadge.low
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <article
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-sharp border border-border-subtle bg-bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
+              {Math.round((score ?? 0) * 100)}% MATCH
+            </span>
+            <span
+              className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
+            >
+              {severity}
+            </span>
+            {payload?.issue_type && (
+              <span className="font-mono text-[10px] uppercase tracking-[0.10em] text-text-muted">
+                {String(payload.issue_type).replace(/_/g, ' ')}
+              </span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-sharp border border-border-default px-3 py-1 font-mono text-[11px] text-text-muted hover:text-text-primary"
+          >
+            Close
+          </button>
+        </div>
+
+        {payload?.codes?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {payload.codes.map((code) => (
+              <span
+                key={code}
+                className="rounded-sharp border border-border-default px-1.5 py-0.5 font-mono text-[10px] text-amber"
+              >
+                {code}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-4 space-y-4 text-[13px] leading-6 text-text-secondary font-display">
+          {payload?.summary && (
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+                Summary
+              </p>
+              <p>{payload.summary}</p>
+            </div>
+          )}
+          {payload?.recommended_actions && (
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+                Recommended actions
+              </p>
+              <p>{payload.recommended_actions}</p>
+            </div>
+          )}
+          {payload?.evidence_requests && (
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+                Evidence to request
+              </p>
+              <p>{payload.evidence_requests}</p>
+            </div>
+          )}
+          {payload?.evidence_checklist?.length > 0 && (
+            <div>
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+                Evidence checklist
+              </p>
+              <ul className="list-inside list-disc space-y-0.5 text-text-secondary">
+                {payload.evidence_checklist.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {payload?.letter_snippet && (
+            <div className="rounded-sharp border border-border-subtle bg-bg-base p-3">
+              <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted mb-1">
+                Dispute language
+              </p>
+              <p className="italic text-text-primary">{payload.letter_snippet}</p>
+            </div>
+          )}
+          {payload?.typical_outcome && (
+            <p className="font-mono text-[10px] text-text-muted">Typical outcome: {payload.typical_outcome}</p>
+          )}
+        </div>
+
+        {payload?.tags?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1">
+            {payload.tags.map((tag) => (
+              <span key={tag} className="rounded-sharp bg-bg-base px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </article>
+    </div>
+  )
+}
+
 export default function Results() {
   const { billId } = useParams()
   const navigate = useNavigate()
@@ -182,6 +344,33 @@ export default function Results() {
     () => lineItems.filter((item) => selectedItemIds.includes(item.id)),
     [selectedItemIds]
   )
+
+  const itemsForPrecedentQuery = useMemo(
+    () => (selectedItems.length > 0 ? selectedItems : flaggedItems),
+    [selectedItems, flaggedItems]
+  )
+
+  const [precedents, setPrecedents] = useState([])
+  const [precedentsLoading, setPrecedentsLoading] = useState(false)
+  const [precedentsError, setPrecedentsError] = useState(null)
+  const [selectedPrecedent, setSelectedPrecedent] = useState(null)
+
+  useEffect(() => {
+    const query = buildPrecedentQuery(itemsForPrecedentQuery)
+    if (!query.trim()) {
+      setPrecedents([])
+      setPrecedentsLoading(false)
+      setPrecedentsError(null)
+      return
+    }
+    setPrecedentsLoading(true)
+    setPrecedentsError(null)
+    api
+      .searchPrecedents(query, 5)
+      .then((res) => setPrecedents(res.precedents ?? []))
+      .catch((err) => setPrecedentsError(err.message))
+      .finally(() => setPrecedentsLoading(false))
+  }, [itemsForPrecedentQuery])
 
   const selectedDisputeTotal = selectedItems.reduce((sum, item) => sum + item.billed, 0)
 
@@ -276,10 +465,46 @@ export default function Results() {
         </div>
 
         <aside className="space-y-3">
-          {flaggedItems.map((item) => (
-            <FlagCard key={item.id} item={item} />
-          ))}
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">Top 5 similar cases</p>
+          {itemsForPrecedentQuery.length === 0 && (
+            <p className="font-mono text-sm text-text-muted">Select items to find similar cases.</p>
+          )}
+          {itemsForPrecedentQuery.length > 0 && precedentsLoading && (
+            <div className="flex items-center gap-3 py-8">
+              <div className="h-6 w-6 flex-shrink-0 animate-spin rounded-full border-2 border-amber border-t-transparent" />
+              <span className="font-mono text-sm text-text-muted">Searching precedents...</span>
+            </div>
+          )}
+          {itemsForPrecedentQuery.length > 0 && !precedentsLoading && precedentsError && (
+            <div className="rounded-sharp border border-flag-high-border bg-flag-high-dim px-4 py-3">
+              <p className="font-mono text-sm text-flag-high">{precedentsError}</p>
+            </div>
+          )}
+          {itemsForPrecedentQuery.length > 0 && !precedentsLoading && !precedentsError && precedents.length === 0 && (
+            <p className="font-mono text-sm text-text-muted">No similar cases found.</p>
+          )}
+          {itemsForPrecedentQuery.length > 0 &&
+            !precedentsLoading &&
+            !precedentsError &&
+            precedents.length > 0 && (
+              <div className="space-y-3">
+                {precedents.map((p) => (
+                  <CompactPrecedentCard
+                    key={p.id ?? p.payload?.summary?.slice(0, 30)}
+                    precedent={p}
+                    onClick={() => setSelectedPrecedent(p)}
+                  />
+                ))}
+              </div>
+            )}
         </aside>
+
+        {selectedPrecedent && (
+          <PrecedentDetailModal
+            precedent={selectedPrecedent}
+            onClose={() => setSelectedPrecedent(null)}
+          />
+        )}
       </section>
 
       {selectedItemIds.length > 0 ? (
