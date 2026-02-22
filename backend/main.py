@@ -30,6 +30,8 @@ _env_exists = (_backend_dir / ".env").exists()
 _debug_log("startup env check", {"cwd": os.getcwd(), "backend_dir": str(_backend_dir), "dotenv_exists": _env_exists, "GEMINI_API_KEY_set": _env_key_set}, "H1")
 # #endregion
 
+from pydantic import BaseModel
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from services.gemini_service import ExtractionError, extract_bill
@@ -214,6 +216,30 @@ def get_bill_precedents(bill_id: str, top_k: int = 5):
                 "precedents": precedents,
             })
         return {"line_items": enriched}
+    except PrecedentServiceError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Precedent search unavailable. Ensure VectorAI DB is running at localhost:50051 and precedents are seeded. {exc!s}",
+        ) from exc
+
+
+class PrecedentSearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+
+
+@app.post("/precedents/search")
+def search_precedents_endpoint(req: PrecedentSearchRequest):
+    """
+    Search precedents by free-form query text. Returns top_k similar cases.
+    No dependency on BILLS_STORE; works with any query string.
+    """
+    try:
+        precedents = search_precedents(
+            req.query.strip() or "medical bill line item",
+            top_k=max(1, min(req.top_k, 20)),
+        )
+        return {"precedents": precedents}
     except PrecedentServiceError as exc:
         raise HTTPException(
             status_code=503,

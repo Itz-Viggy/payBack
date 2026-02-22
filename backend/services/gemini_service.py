@@ -188,7 +188,7 @@ def _call_gemini_check(prompt_name: str, substitutions: dict[str, str], log_labe
         return None
 
 
-def run_relationship_check(line_items: list[dict], state: str = "") -> list[dict]:
+def run_relationship_check(line_items: list[dict], state: str = "", similar_cases_context: str = "") -> list[dict]:
     """Run Gemini relationship check and normalize findings to unified flag shape."""
     if not line_items:
         return []
@@ -197,6 +197,7 @@ def run_relationship_check(line_items: list[dict], state: str = "") -> list[dict
         {
             "{{line_items_json}}": json.dumps(line_items, indent=2),
             "{{state}}": state or "Not specified",
+            "{{similar_cases_context}}": similar_cases_context or "None provided.",
         },
         "run_relationship_check",
     )
@@ -205,7 +206,7 @@ def run_relationship_check(line_items: list[dict], state: str = "") -> list[dict
     return _normalize_single_id_flags(raw_flags, "Potential relationship billing issue.")
 
 
-def run_upcoding_check(line_items: list[dict], diagnosis_codes: list[str], state: str = "") -> list[dict]:
+def run_upcoding_check(line_items: list[dict], diagnosis_codes: list[str], state: str = "", similar_cases_context: str = "") -> list[dict]:
     """Run Gemini upcoding check (E&M level vs diagnosis complexity)."""
     if not line_items:
         return []
@@ -215,6 +216,7 @@ def run_upcoding_check(line_items: list[dict], diagnosis_codes: list[str], state
             "{{line_items_json}}": json.dumps(line_items, indent=2),
             "{{diagnosis_codes_json}}": json.dumps(diagnosis_codes, indent=2),
             "{{state}}": state or "Not specified",
+            "{{similar_cases_context}}": similar_cases_context or "None provided.",
         },
         "run_upcoding_check",
     )
@@ -223,7 +225,7 @@ def run_upcoding_check(line_items: list[dict], diagnosis_codes: list[str], state
     return _normalize_single_id_flags(raw_flags, "Potential upcoding issue.")
 
 
-def run_unbundling_check(line_items: list[dict], state: str = "") -> list[dict]:
+def run_unbundling_check(line_items: list[dict], state: str = "", similar_cases_context: str = "") -> list[dict]:
     """Run Gemini unbundling check (CPT bundling violations)."""
     if not line_items:
         return []
@@ -232,6 +234,7 @@ def run_unbundling_check(line_items: list[dict], state: str = "") -> list[dict]:
         {
             "{{line_items_json}}": json.dumps(line_items, indent=2),
             "{{state}}": state or "Not specified",
+            "{{similar_cases_context}}": similar_cases_context or "None provided.",
         },
         "run_unbundling_check",
     )

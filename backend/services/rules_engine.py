@@ -240,6 +240,47 @@ def _print_findings(flags: list[dict[str, Any]], summary: dict[str, Any]) -> Non
     print(f"Total: {summary.get('total_flags', 0)} findings" + (f" ({details})" if details else ""))
 
 
+def _build_precedent_query(line_items: list[dict[str, Any]]) -> str:
+    """Build a single query string from all bill line items for vector search."""
+    segments: list[str] = []
+    for item in line_items:
+        parts = [
+            item.get("description") or "",
+            f"CPT {item.get('cpt_code') or 'N/A'}",
+            f"quantity {item.get('quantity', '')}",
+            f"unit price {item.get('unit_price', '')}",
+            f"total {item.get('total_charge', '')}",
+        ]
+        segment = " ".join(str(p).strip() for p in parts if p).strip()
+        if segment:
+            segments.append(segment)
+    return "; ".join(segments) or "medical bill line item"
+
+
+def _format_similar_cases(precedents: list[dict[str, Any]]) -> str:
+    """Format top precedent results into a concise context block for Gemini prompts."""
+    if not precedents:
+        return "None provided."
+    lines: list[str] = []
+    for i, p in enumerate(precedents, start=1):
+        payload = p.get("payload") or {}
+        score = p.get("score", 0)
+        summary = payload.get("summary") or "No summary."
+        issue_type = (payload.get("issue_type") or "unknown").replace("_", " ")
+        actions = payload.get("recommended_actions") or "N/A"
+        snippet = payload.get("letter_snippet") or ""
+        block = (
+            f"Case {i} ({score:.0%} match):\n"
+            f"  Summary: {summary}\n"
+            f"  Issue type: {issue_type}\n"
+            f"  Recommended actions: {actions}"
+        )
+        if snippet:
+            block += f"\n  Dispute language: {snippet}"
+        lines.append(block)
+    return "\n\n".join(lines)
+
+
 def run_holistic_review(layer2_payload: dict[str, Any]) -> dict[str, Any]:
     """Run deterministic and Gemini-assisted checks and return unified findings."""
     from services.gemini_service import (
@@ -247,6 +288,7 @@ def run_holistic_review(layer2_payload: dict[str, Any]) -> dict[str, Any]:
         run_upcoding_check,
         run_unbundling_check,
     )
+    from services.precedent_service import PrecedentServiceError, search_precedents
 
     rules_flags = run_rules(layer2_payload)
 
@@ -257,9 +299,19 @@ def run_holistic_review(layer2_payload: dict[str, Any]) -> dict[str, Any]:
     diagnosis_codes = layer2_payload.get("diagnosis_codes") or []
     state = layer2_payload.get("state") or ""
 
-    relationship_flags = run_relationship_check(line_items, state)
-    upcoding_flags = run_upcoding_check(line_items, diagnosis_codes, state)
-    unbundling_flags = run_unbundling_check(line_items, state)
+    similar_cases_context = "None provided."
+    if line_items:
+        try:
+            query = _build_precedent_query(line_items)
+            precedents = search_precedents(query, top_k=3)
+            similar_cases_context = _format_similar_cases(precedents)
+            print(f"[rules_engine] Fetched {len(precedents)} similar cases for context")
+        except PrecedentServiceError as exc:
+            print(f"[rules_engine] Precedent search unavailable, proceeding without: {exc}")
+
+    relationship_flags = run_relationship_check(line_items, state, similar_cases_context)
+    upcoding_flags = run_upcoding_check(line_items, diagnosis_codes, state, similar_cases_context)
+    unbundling_flags = run_unbundling_check(line_items, state, similar_cases_context)
 
     all_flags = rules_flags + relationship_flags + upcoding_flags + unbundling_flags
     for idx, flag in enumerate(all_flags, start=1):

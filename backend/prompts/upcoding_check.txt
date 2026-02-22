@@ -33,6 +33,9 @@ Return ONLY valid JSON:
 
 If no issues are found, return: { "flags": [] }
 
+Similar historical cases (use for context on how similar upcoding issues were identified and approached in the past):
+{{similar_cases_context}}
+
 Diagnosis codes:
 {{diagnosis_codes_json}}
 
