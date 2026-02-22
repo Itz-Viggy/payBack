@@ -37,8 +37,8 @@ export default {
         'status-denied': '#D94F4F',
       },
       fontFamily: {
-        display: ['Syne', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         sharp: '2px',

@@ -113,7 +113,7 @@ export default function Send() {
               Your letter exceeds URL length limits. Copy the body below, then we&apos;ll open your mail client with subject and a short instruction to paste.
             </p>
             <div className="mt-4 max-h-[320px] overflow-y-auto rounded-sharp border border-border-subtle bg-bg-elevated px-4 py-4">
-              <pre className="whitespace-pre-wrap font-mono text-[13px] text-text-primary">{body}</pre>
+              <pre className="whitespace-pre-wrap font-display text-[13px] leading-[1.8] text-text-primary">{body}</pre>
             </div>
             <div className="mt-4 flex flex-wrap gap-3">
               <button type="button" className="btn-primary" onClick={() => { handleOpenDraftFromModal(); }}>
