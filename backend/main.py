@@ -36,16 +36,14 @@ import asyncio
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from services.gemini_service import ExtractionError, extract_bill
 from services.pdf_converter import (
     ConversionError,
     UnsupportedFileTypeError,
     convert_to_bill_input,
 )
 from services.precedent_service import PrecedentServiceError, search_precedents
-from services.medical_db import process_entire_bill
 from services.history import router as history_router, store_bill_analysis
-from services.rules_engine import run_holistic_review
+from graph import pipeline
 
 app = FastAPI(title="PayBack API", version="0.1.0")
 BILLS_STORE: dict[str, dict] = {}
@@ -124,37 +122,33 @@ async def upload_bill(file: UploadFile = File(...)):
 
 
 async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, content_type: str):
-    """Background task: runs all analysis layers and writes results to BILLS_STORE."""
+    """Background task: runs the LangGraph agent pipeline and writes results to BILLS_STORE."""
+
+    # Map each graph node completion to the frontend stage index
+    _STAGE_AFTER_NODE = {"ocr": 2, "extract": 3, "query": 4, "rules": 5}
+
+    initial_state = {
+        "raw_text": converted.text,
+        "images": converted.images,
+        "image_mime": converted.image_mime,
+    }
+
+    final_state: dict = dict(initial_state)
+
     try:
-        # Stage 2: Gemini text / image extraction
-        PIPELINE_STATUS[bill_id] = {"stage": 2, "error": None}
-        try:
-            extracted_data = extract_bill(converted.text, converted.images)
-        except ExtractionError as exc:
-            PIPELINE_STATUS[bill_id] = {"stage": "error", "error": str(exc)}
-            return
+        async for chunk in pipeline.astream(initial_state, stream_mode="updates"):
+            for node_name, node_output in chunk.items():
+                if isinstance(node_output, dict):
+                    final_state.update(node_output)
+                if node_name in _STAGE_AFTER_NODE:
+                    PIPELINE_STATUS[bill_id] = {"stage": _STAGE_AFTER_NODE[node_name], "error": None}
 
-        print("[gemini] Extraction:\n" + json.dumps(extracted_data, indent=2))
-
-        # Stage 3: Hospital rate lookup (concurrent async benchmarking)
-        PIPELINE_STATUS[bill_id] = {"stage": 3, "error": None}
-        layer2_payload = await process_entire_bill(extracted_data)
-        layer2_payload["diagnosis_codes"] = extracted_data.get("diagnosis_codes") or []
-        layer2_payload["state"] = extracted_data.get("state") or ""
-        print(f"[medical_db] Benchmarks for bill {bill_id}:\n" + json.dumps(layer2_payload, indent=2))
-
-        # Stage 4: Error detection (deterministic rules engine)
-        PIPELINE_STATUS[bill_id] = {"stage": 4, "error": None}
-        review_result = run_holistic_review(layer2_payload)
-        print(f"[rules_engine] Summary for bill {bill_id}:\n" + json.dumps(review_result["summary"], indent=2))
-
-        # Stage 5: Assembling final report object
-        PIPELINE_STATUS[bill_id] = {"stage": 5, "error": None}
+        # Build BILLS_STORE entry (same shape the frontend expects)
         BILLS_STORE[bill_id] = {
-            **extracted_data,
-            "flags": review_result["flags"],
-            "summary": review_result["summary"],
-            "benchmarks": layer2_payload.get("audited_items", []),
+            **final_state["extracted_data"],
+            "flags": final_state["flags"],
+            "summary": final_state["summary"],
+            "benchmarks": final_state.get("audited_items", []),
         }
 
         # ── Persist to MongoDB ─────────────────────────────────────────────
@@ -177,13 +171,13 @@ async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, 
                 file_bytes=content,
                 filename=filename,
                 content_type=content_type,
-                raw_ocr_text=raw_ocr_text,
-                extracted_codes=layer2_payload.get("extracted_codes", []),
-                standard_charges=layer2_payload.get("standard_charges", []),
-                billed_charges=layer2_payload.get("billed_charges", []),
-                hospital_name=hospital_name,
-                total_billed=total_billed,
-                estimated_overcharge=round(estimated_overcharge, 2) if estimated_overcharge else None,
+                raw_ocr_text=final_state.get("raw_text") or "",
+                extracted_codes=final_state.get("extracted_codes", []),
+                standard_charges=final_state.get("standard_charges", []),
+                billed_charges=final_state.get("billed_charges", []),
+                hospital_name=final_state.get("facility"),
+                total_billed=final_state["extracted_data"].get("total_billed"),
+                estimated_overcharge=final_state.get("estimated_overcharge"),
             )
             analysis_id = db_result["bill_analysis_id"]
             print(f"[history] Stored analysis: {analysis_id}")
@@ -191,10 +185,8 @@ async def _run_pipeline(bill_id: str, converted, content: bytes, filename: str, 
             print(f"[history] WARNING — failed to persist: {exc}")
             analysis_id = None
 
-        # Attach the analysisId to the in-memory record so the frontend can read it
         BILLS_STORE[bill_id]["analysisId"] = analysis_id
 
-        # Mark pipeline complete — polling frontend will navigate to /results/{bill_id}
         PIPELINE_STATUS[bill_id] = {"stage": "done", "error": None}
 
     except Exception as exc:

@@ -212,11 +212,11 @@ export default function Dispute() {
             <textarea
               value={letterText}
               onChange={(e) => setLetterText(e.target.value)}
-              className="w-full flex-1 resize-none bg-transparent px-7 py-9 font-mono text-[13px] font-light leading-[1.9] text-text-primary outline-none"
+              className="w-full flex-1 resize-none bg-transparent px-7 py-9 font-display text-[13px] font-normal leading-[1.8] text-text-primary outline-none"
               style={{ minHeight: '500px' }}
             />
           ) : (
-            <div className="whitespace-pre-wrap px-7 py-9 font-mono text-[13px] font-light leading-[1.9] text-text-primary">
+            <div className="whitespace-pre-wrap px-7 py-9 font-display text-[13px] font-normal leading-[1.8] text-text-primary">
               {letterText}
             </div>
           )}

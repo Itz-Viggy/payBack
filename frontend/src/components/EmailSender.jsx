@@ -28,7 +28,7 @@ export default function EmailSender({
               type="email"
               value={draft.recipient}
               onChange={(e) => onToChange?.(e.target.value)}
-              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-amber"
+              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-display text-sm text-text-primary outline-none focus:border-amber"
               placeholder="billing@hospital.org"
             />
             <button type="button" className="btn-ghost shrink-0" onClick={onCopyRecipient}>
@@ -44,7 +44,7 @@ export default function EmailSender({
               type="text"
               value={draft.subject}
               onChange={(e) => onSubjectChange?.(e.target.value)}
-              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-mono text-sm text-text-primary outline-none focus:border-amber"
+              className="flex-1 rounded-sharp border border-border-subtle bg-bg-surface px-3 py-2 font-display text-sm text-text-primary outline-none focus:border-amber"
               placeholder="Dispute of Medical Bill – Request for Itemized Statement"
             />
             <button type="button" className="btn-ghost shrink-0" onClick={onCopySubject}>
@@ -56,7 +56,7 @@ export default function EmailSender({
         <div>
           <label className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">BODY (read-only)</label>
           <div className="mt-1 max-h-[200px] overflow-y-auto rounded-sharp border border-border-subtle bg-bg-elevated px-3 py-2">
-            <pre className="whitespace-pre-wrap font-mono text-[12px] text-text-primary">{draft.letterText || '—'}</pre>
+            <pre className="whitespace-pre-wrap font-display text-[13px] leading-[1.8] text-text-primary">{draft.letterText || '—'}</pre>
           </div>
           <button type="button" className="btn-ghost mt-2" onClick={onCopyBody}>
             COPY BODY

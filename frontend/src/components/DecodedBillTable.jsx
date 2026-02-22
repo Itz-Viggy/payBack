@@ -1,5 +1,23 @@
 import { Fragment, useMemo, useState } from 'react'
-import { formatCurrency, formatCurrencyDetailed, formatMarkup } from '../utils/format'
+import { formatCurrency, formatCurrencyDetailed, formatOvercharge } from '../utils/format'
+
+const RULE_LABELS = {
+  duplicate_charge: 'Duplicate code',
+  quantity_anomaly: 'Quantity anomaly',
+  extreme_markup: 'Extreme markup',
+  facility_fee: 'Facility fee',
+  discharge_day_bill: 'Discharge day billing',
+  upcoding: 'Upcoding',
+  unbundling: 'Unbundling',
+  component_billing: 'Component billing (multiple charges for 1)',
+  modifier_abuse: 'Modifier abuse',
+  relationship_issue: 'Relationship issue',
+  suspicious: 'Suspicious',
+}
+
+function getRuleLabel(rule) {
+  return RULE_LABELS[rule] || String(rule).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
 
 const severityConfig = {
   high: {
@@ -32,10 +50,10 @@ const severityConfig = {
   },
 }
 
-function getStatusClass(markup) {
-  if (markup > 10) return 'text-flag-high'
-  if (markup >= 5) return 'text-flag-medium'
-  if (markup >= 2) return 'text-flag-low'
+function getOverchargeSeverityClass(overcharge) {
+  if (overcharge >= 200) return 'text-flag-high'
+  if (overcharge >= 50) return 'text-flag-medium'
+  if (overcharge > 0) return 'text-flag-low'
   return 'text-text-secondary'
 }
 
@@ -77,8 +95,8 @@ export default function DecodedBillTable({
               <th className="px-5 text-center font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Qty</th>
               <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Billed</th>
               <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Benchmark</th>
-              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Markup</th>
-              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Status</th>
+              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Overcharge</th>
+              <th className="px-5 text-right font-mono text-[11px] uppercase tracking-[0.15em] text-text-muted">Severity</th>
             </tr>
           </thead>
           <tbody>
@@ -114,8 +132,8 @@ export default function DecodedBillTable({
                     <td className="px-5 text-right font-mono text-sm text-text-secondary">
                       {formatCurrency(item.benchmark)}
                     </td>
-                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getStatusClass(item.markup)}`}>
-                      {formatMarkup(item.markup)}
+                    <td className={`px-5 text-right font-mono text-sm font-semibold ${getOverchargeSeverityClass(item.overcharge)}`}>
+                      ${formatOvercharge(item.billed, item.benchmark)}
                     </td>
                     <td className="px-5 text-right">
                       {item.severity === 'clear' ? (
@@ -138,22 +156,35 @@ export default function DecodedBillTable({
                       >
                         <div className="grid gap-6 md:grid-cols-2">
                           <div>
-                            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">What this means</p>
-                            <p className="mt-2 font-display text-sm leading-6 text-text-primary">{item.reason}</p>
-                            <p className="mt-2 font-display text-[13px] text-text-secondary">{item.citation}</p>
+                            <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Why it was flagged</p>
+                            {item.flagReasons?.length ? (
+                              <ul className="mt-2 space-y-2 font-display text-sm leading-6 text-text-primary">
+                                {item.flagReasons.map((fr, i) => (
+                                  <li key={i}>
+                                    <span className="font-semibold text-flag-medium">{getRuleLabel(fr.rule)}: </span>
+                                    {fr.message}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="mt-2 font-display text-sm leading-6 text-text-primary">{item.reason}</p>
+                            )}
+                            {item.citation ? (
+                              <p className="mt-2 font-display text-[13px] text-text-secondary">{item.citation}</p>
+                            ) : null}
                           </div>
 
                           <div>
                             <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Benchmark</p>
                             <div className="mt-2 space-y-1 font-mono">
                               <p className="text-base font-semibold text-flag-high">
-                                Billed: {formatCurrencyDetailed(item.billed)}
+                                You paid: {formatCurrencyDetailed(item.billed)}
                               </p>
                               <p className="text-sm text-text-secondary">
-                                Negotiated: {formatCurrencyDetailed(item.negotiated)}
+                                Market rate: {formatCurrencyDetailed(item.benchmark)}
                               </p>
                               <p className="text-xs text-text-muted">
-                                Medicare: {formatCurrencyDetailed(item.medicare)}
+                                {item.billed <= item.benchmark ? 'Below market' : 'Above market'}
                               </p>
                             </div>
                           </div>

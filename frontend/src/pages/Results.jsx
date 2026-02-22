@@ -7,36 +7,95 @@ import { api } from '../api/client'
 import { formatCurrency, formatDateShort } from '../utils/format'
 
 
-const severityBadge = {
-  high: 'border-flag-high-border bg-flag-high-dim text-flag-high',
-  medium: 'border-flag-medium-border bg-flag-medium-dim text-flag-medium',
-  low: 'border-flag-low-border bg-flag-low-dim text-flag-low',
-}
-
 /* ── helpers to transform backend shapes into component shapes ──────── */
 
-function classifySeverity(markup) {
-  if (markup >= 10) return 'high'
-  if (markup >= 3) return 'medium'
-  if (markup >= 1.5) return 'low'
+function classifySeverityByMarkup(markup) {
+  if (markup > 3) return 'high'
+  if (markup > 1.5) return 'medium'
+  if (markup > 1) return 'low'
   return 'clear'
 }
 
+/** Bump severity when there's a lot of money to save; otherwise returns 'clear' */
+function classifySeverityByOvercharge(overcharge) {
+  if (overcharge < 0.01) return 'clear'
+  if (overcharge >= 200) return 'high'
+  if (overcharge >= 50) return 'medium'
+  return 'low'
+}
+
+const SEVERITY_ORDER = { low: 1, medium: 2, high: 3 }
+
+function pickWorstSeverity(a, b) {
+  if (!a || a === 'clear') return b
+  if (!b || b === 'clear') return a
+  return SEVERITY_ORDER[a] >= SEVERITY_ORDER[b] ? a : b
+}
+
+const SMALL_AMOUNT_THRESHOLD = 25  // below this, unbundling/duplicates → low risk
+
 function buildLineItems(benchmarks, flags) {
-  return benchmarks.map((entry, idx) => {
+  // First pass: compute bestBench per entry
+  const rawItems = benchmarks.map((entry, idx) => {
     const item = entry.billed_item || {}
     const benches = entry.market_benchmarks || []
-
-    const billed = parseFloat(item.patient_owed || 0) // Updated to use patient_owed
     const bestBench = benches.length
       ? Math.min(...benches.map((b) => parseFloat(b.standard_charge || 0)).filter(Boolean))
       : 0
-    const markup = bestBench > 0 ? +(billed / bestBench).toFixed(2) : 0
-    const severity = classifySeverity(markup)
+    return { idx, item, bestBench }
+  })
 
-    // Find the first flag that references this line item
-    const lineId = item.line_item_id
-    const matchingFlag = flags.find((f) => (f.line_item_ids || []).includes(lineId))
+  // Normalize benchmarks for duplicate CPT codes: use min across same-CPT items (avoids different benchmarks for same code)
+  const cptToMinBench = {}
+  for (const { item, bestBench } of rawItems) {
+    if (bestBench <= 0) continue
+    const code = item.cpt_code || 'N/A'
+    if (!(code in cptToMinBench) || bestBench < cptToMinBench[code]) {
+      cptToMinBench[code] = bestBench
+    }
+  }
+
+  return rawItems.map(({ idx, item, bestBench: rawBench }) => {
+    const code = item.cpt_code || 'N/A'
+    const bestBench = code in cptToMinBench ? cptToMinBench[code] : rawBench
+
+    const billed = parseFloat(item.patient_owed || item.unit_price || item.total_charge || 0)
+    const markup = bestBench > 0 ? +(billed / bestBench).toFixed(2) : 0
+    const overcharge = Math.max(0, billed - bestBench)
+
+    const sameValue = bestBench > 0 && Math.abs(billed - bestBench) < 0.01
+    const markupSeverity = sameValue ? 'clear' : classifySeverityByMarkup(markup)
+
+    const lineId = item.line_item_id ?? idx + 1
+    const matchingFlags = (flags || []).filter((f) =>
+      (f.line_item_ids || []).some((fid) => fid == lineId)
+    )
+    const flagReasons = matchingFlags.map((f) => ({
+      rule: f.rule_name || 'suspicious',
+      message: f.message || 'Billing rule triggered',
+      severity: f.severity || 'medium',
+    }))
+
+    const flagSeverity = matchingFlags.length
+      ? matchingFlags.reduce((worst, f) => pickWorstSeverity(worst, f.severity || 'medium'), null)
+      : null
+
+    const overchargeSeverity = classifySeverityByOvercharge(overcharge)
+
+    // Combine: flags/markup still matter; high overcharge bumps severity to high/medium
+    let finalSeverity = pickWorstSeverity(
+      pickWorstSeverity(markupSeverity, flagSeverity),
+      overchargeSeverity
+    ) || markupSeverity
+
+    // Cap at LOW when amount at stake is small (unbundling/duplicates with $25 or less)
+    const amountAtStake = Math.max(billed, overcharge)
+    if (amountAtStake <= SMALL_AMOUNT_THRESHOLD && finalSeverity !== 'clear') {
+      finalSeverity = 'low'
+    }
+
+    const primaryReason = flagReasons[0]?.message || (finalSeverity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.')
+    const primaryCitation = matchingFlags[0]?.citation || (finalSeverity === 'clear' ? '' : '')
 
     return {
       id: `li-${lineId ?? idx + 1}`,
@@ -46,11 +105,13 @@ function buildLineItems(benchmarks, flags) {
       billed,
       benchmark: bestBench,
       markup,
-      severity: matchingFlag ? matchingFlag.severity || severity : severity,
-      reason: matchingFlag?.message || (severity === 'clear' ? 'Within expected benchmark range.' : 'Charge exceeds benchmark.'),
-      citation: matchingFlag?.citation || (severity === 'clear' ? 'No variance' : ''),
-      negotiated: bestBench,   // best available proxy
-      medicare: bestBench,     // best available proxy
+      overcharge,
+      severity: finalSeverity,
+      flagReasons: flagReasons.length ? flagReasons : null,
+      reason: primaryReason,
+      citation: primaryCitation,
+      negotiated: bestBench,
+      medicare: bestBench,
     }
   })
 }
@@ -62,11 +123,15 @@ function buildReportData(bill, lineItems) {
     return sum
   }, 0)
 
+  const lineItemsSum = lineItems.reduce((s, i) => s + i.billed, 0)
+  const totalBilled = bill.total_patient_billed ?? bill.total_billed ?? lineItemsSum
+
   return {
     hospitalName: bill.facility || 'Unknown Facility',
     accountNumber: bill.account_number || '\u2014',
     dateOfService: bill.bill_date || '',
-    totalBilled: bill.total_patient_billed || lineItems.reduce((s, i) => s + i.billed, 0), // Updated to use total_patient_billed
+    totalBilled,
+    totalFromLineItems: !bill.total_patient_billed && !bill.total_billed,
     flagsFound: flagged.length,
     estimatedOvercharge: Math.round(overcharge * 100) / 100,
   }
@@ -93,8 +158,6 @@ function buildPrecedentQuery(items) {
 
 function CompactPrecedentCard({ precedent, onClick }) {
   const { score, payload } = precedent
-  const severity = payload?.severity ?? 'low'
-  const badge = severityBadge[severity] ?? severityBadge.low
   const summary = payload?.summary ?? ''
   const truncated = summary.length > 80 ? `${summary.slice(0, 80)}…` : summary
 
@@ -108,11 +171,6 @@ function CompactPrecedentCard({ precedent, onClick }) {
         <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
           {Math.round((score ?? 0) * 100)}% MATCH
         </span>
-        <span
-          className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
-        >
-          {severity}
-        </span>
       </div>
       <p className="mt-2 font-display text-[13px] leading-6 text-text-secondary line-clamp-3">{truncated}</p>
     </button>
@@ -122,8 +180,6 @@ function CompactPrecedentCard({ precedent, onClick }) {
 function PrecedentDetailModal({ precedent, onClose }) {
   if (!precedent) return null
   const { score, payload } = precedent
-  const severity = payload?.severity ?? 'low'
-  const badge = severityBadge[severity] ?? severityBadge.low
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -135,11 +191,6 @@ function PrecedentDetailModal({ precedent, onClose }) {
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-sharp border border-amber-border bg-amber-dim px-2 py-0.5 font-mono text-[10px] font-semibold text-amber">
               {Math.round((score ?? 0) * 100)}% MATCH
-            </span>
-            <span
-              className={`rounded-sharp border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.10em] ${badge}`}
-            >
-              {severity}
             </span>
             {payload?.issue_type && (
               <span className="font-mono text-[10px] uppercase tracking-[0.10em] text-text-muted">
@@ -419,6 +470,9 @@ export default function Results() {
               <p className="mt-1 font-mono text-3xl font-semibold text-text-primary">
                 {formatCurrency(reportData.totalBilled)}
               </p>
+              <p className="mt-0.5 font-mono text-[10px] text-text-muted">
+                {reportData.totalFromLineItems ? 'Sum of line items below' : 'From extracted bill'}
+              </p>
             </div>
             <div className="sm:px-4">
               <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-muted">Flags found</p>
@@ -463,7 +517,7 @@ export default function Results() {
         </div>
 
         <aside className="space-y-3">
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">Top 5 similar cases</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-muted">Top similar cases</p>
           {itemsForPrecedentQuery.length === 0 && (
             <p className="font-mono text-sm text-text-muted">Select items to find similar cases.</p>
           )}

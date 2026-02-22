@@ -38,7 +38,7 @@ export default function Home() {
       </p>
 
       <h1
-        className="mt-3 font-display text-4xl font-bold leading-tight text-text-primary sm:text-5xl"
+        className="mt-3 font-hero text-4xl font-extrabold tracking-tight leading-[1.05] text-text-primary sm:text-5xl"
         style={{ animation: 'fadeUp 0.5s ease-out 0.20s both' }}
       >
         Your bill,
@@ -66,7 +66,7 @@ export default function Home() {
           className="rounded-lg border border-border-subtle bg-bg-surface p-5"
           style={{ animation: 'fadeUp 0.4s ease-out 0.55s both' }}
         >
-          <p className="font-mono text-3xl font-semibold text-amber">73%</p>
+          <p className="font-mono text-3xl font-semibold text-amber">80%</p>
           <p className="mt-2 font-display text-xs text-text-muted">of bills contain errors</p>
         </div>
         <div
