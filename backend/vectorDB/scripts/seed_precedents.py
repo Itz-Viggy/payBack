@@ -17,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-CORTEX_ADDR = os.getenv("CORTEX_SERVER", "localhost:50051")
+CORTEX_ADDR = os.getenv("CORTEX_SERVER", "127.0.0.1:50051")
 COLLECTION_NAME = "precedents"
 VECTOR_DIMENSION = 384
 MODEL_NAME = "all-MiniLM-L6-v2"
@@ -75,7 +75,8 @@ def main() -> int:
             except Exception:
                 print(f"Collection '{COLLECTION_NAME}' already exists (skipping create)")
 
-            # Build payloads (include summary so UI can show "similar case" summary)
+            # Build payloads — serialise list fields as JSON strings
+            # (Actian VectorAI DB payloads only support scalar values)
             ids = list(range(len(precedents)))
             payloads = []
             for p in precedents:
@@ -83,17 +84,17 @@ def main() -> int:
                     "summary": p["summary"],
                     "issue_type": p["issue_type"],
                     "setting": p["setting"],
-                    "codes": p["codes"],
+                    "codes": json.dumps(p["codes"]),
                     "severity": p["severity"],
                     "recommended_actions": p["recommended_actions"],
                     "evidence_requests": p["evidence_requests"],
-                    "evidence_checklist": p["evidence_checklist"],
+                    "evidence_checklist": json.dumps(p["evidence_checklist"]),
                     "letter_snippet": p["letter_snippet"],
                 }
                 if "typical_outcome" in p:
                     payload["typical_outcome"] = p["typical_outcome"]
                 if "tags" in p:
-                    payload["tags"] = p["tags"]
+                    payload["tags"] = json.dumps(p["tags"])
                 payloads.append(payload)
 
             # Batch upsert

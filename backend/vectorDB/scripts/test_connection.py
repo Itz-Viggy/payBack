@@ -12,7 +12,7 @@ import sys
 
 
 def main() -> int:
-    addr = os.getenv("CORTEX_SERVER", "localhost:50051")
+    addr = os.getenv("CORTEX_SERVER", "127.0.0.1:50051")
     print(f"Connecting to VectorAI DB at {addr} ...")
 
     try:
@@ -37,7 +37,10 @@ def main() -> int:
     except Exception as exc:
         print(f"ERROR: Could not connect to VectorAI DB at {addr}")
         print(f"  {exc}")
-        print("Make sure VectorAI DB is running (e.g. docker compose up -d).")
+        print("Troubleshooting:")
+        print("  1. Restart the container: docker restart vectoraidb  (wait ~30s, then try again)")
+        print("  2. Check container logs: docker logs vectoraidb  (look for gRPC/server errors)")
+        print("  3. If port differs, set CORTEX_SERVER=host:port (e.g. export CORTEX_SERVER=localhost:50052)")
         return 1
 
     return 0

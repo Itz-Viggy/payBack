@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
@@ -12,7 +13,7 @@ _embedding_model = None
 COLLECTION_NAME = "precedents"
 VECTOR_DIMENSION = 384
 DEFAULT_TOP_K = 5
-CORTEX_ADDR = os.getenv("CORTEX_SERVER", "localhost:50051")
+CORTEX_ADDR = os.getenv("CORTEX_SERVER", "127.0.0.1:50051")
 
 
 class PrecedentServiceError(Exception):
@@ -63,10 +64,19 @@ def search_precedents(query_text: str, top_k: int = DEFAULT_TOP_K) -> list[dict[
     except Exception as e:
         raise PrecedentServiceError(f"Vector DB unreachable or search failed: {e}") from e
 
+    _JSON_FIELDS = {"codes", "evidence_checklist", "tags"}
+
     seen_summaries: set[str] = set()
     out = []
     for r in results:
         payload = dict(r.payload) if getattr(r, "payload", None) else {}
+        for key in _JSON_FIELDS:
+            val = payload.get(key)
+            if isinstance(val, str):
+                try:
+                    payload[key] = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    pass
         dedup_key = (payload.get("summary") or "").strip()
         if dedup_key and dedup_key in seen_summaries:
             continue
